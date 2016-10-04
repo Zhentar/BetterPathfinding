@@ -150,6 +150,8 @@ namespace BetterPathfinding
 			new CurvePoint(130f, 35f)
 		};
 
+		private static bool disableDebugFlash = false;
+
 		public static void _Reinit()
 		{
 			mapSizePowTwo = Find.Map.info.PowerOfTwoOverMapSize;
@@ -167,15 +169,16 @@ namespace BetterPathfinding
 		{
 			Vanilla,
 			AdmissableOctile,
-			Mine
+			Better
 		}
 
 
 		public static PawnPath _FindPath(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
-			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Mine);
+			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 
 #if DEBUG
+			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
 
 			sw.Start();
@@ -192,20 +195,21 @@ namespace BetterPathfinding
 			temp.Dispose();
 			sw.Reset();
 
+			//re-run instead of timing the first run, to cut out jit overhead cost
 			sw.Start();
-			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Mine);
+			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
-			Log.Message("~~ Mine ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + result.TotalCost + " path cost!");
+			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + result.TotalCost + " path cost!");
 			Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
 			Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
 			temp.Dispose();
-
+			disableDebugFlash = false;
 #endif
 
 			return result;
 		}
 
-		private static PawnPath FindPathInner(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, HeuristicMode mode = HeuristicMode.Mine)
+		private static PawnPath FindPathInner(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, HeuristicMode mode = HeuristicMode.Better)
 		{
 			//return _FindPathAdmissableVanilla(start, dest, traverseParms, peMode);
 			if (DebugSettings.pathThroughWalls) {
@@ -250,7 +254,7 @@ namespace BetterPathfinding
 			if (peMode == PathEndMode.Touch) {
 				destinationRect = destinationRect.ExpandedBy(1);
 			}
-			if (mode == HeuristicMode.Mine && Find.RegionGrid.GetValidRegionAt(dest.Cell) == null)
+			if (mode == HeuristicMode.Better && Find.RegionGrid.GetValidRegionAt(dest.Cell) == null)
 			{ //TODO: handle path end touch to no region tiles.
 				mode = HeuristicMode.Vanilla;
 			}
@@ -314,7 +318,7 @@ namespace BetterPathfinding
 					curIntVec3 = CellIndices.IndexToCell(curIndex);
 					curX = (ushort)curIntVec3.x;
 					curZ = (ushort)curIntVec3.z;
-					if (DebugViewSettings.drawPaths && mode == HeuristicMode.Mine) {
+					if (DebugViewSettings.drawPaths) {
 						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, calcGrid[curIndex].knownCost.ToString());
 					}
 					if (destinationIsOneCell) {
@@ -473,7 +477,7 @@ namespace BetterPathfinding
 											h = moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy);
 										}
 										break;
-									case HeuristicMode.Mine:
+									case HeuristicMode.Better:
 										if (canPassAnything) {
 											var dx = Mathf.Abs(neighX - destinationX);
 											var dy = Mathf.Abs(neighZ - destinationZ);
@@ -513,7 +517,7 @@ namespace BetterPathfinding
 
 		internal static void DebugFlash(IntVec3 c, float colorPct, string str)
 		{
-			if (DebugViewSettings.drawPaths) {
+			if (DebugViewSettings.drawPaths && !disableDebugFlash) {
 				Find.DebugDrawer.FlashCell(c, colorPct, str);
 			}
 		}
