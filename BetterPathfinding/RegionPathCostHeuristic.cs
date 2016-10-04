@@ -22,7 +22,7 @@ namespace BetterPathfinding
 		private RegionLinkDijkstra distanceBuilder;
 
 		private int lastRegionId = -1;
-		private RegionLink minLink = null;
+		private RegionLink minLink;
 		private int minCost = -1;
 
 		public static Stopwatch DijkstraStopWatch;
@@ -54,7 +54,7 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch = Stopwatch.StartNew();
 #endif
-				distanceBuilder = new RegionLinkDijkstra(targetCell, RegionLinkDistance, RegionLinkDistance);
+				distanceBuilder = new RegionLinkDijkstra(targetCell, OctileDistance, RegionLinkDistance);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
@@ -81,10 +81,6 @@ namespace BetterPathfinding
 			return 1000000; //shouldn't happen except for sappers
 		}
 
-		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length/2 : 0);
-
-		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
-
 		//TODO: calculate to the closest point of the edge
 		private int RegionLinkDistance(IntVec3 cell, RegionLink link)
 		{
@@ -102,23 +98,8 @@ namespace BetterPathfinding
 			return OctileDistance(dx, dz);
 		}
 
-		private static int GetValue(int cellz, int spanz, int spanLen)
-		{
-			return cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
-		}
+		private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
 
-		private int RegionLinkDistance(RegionLink a, RegionLink b)
-		{
-			int dx = Mathf.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
-			int dz = Mathf.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
-
-			return OctileDistance(dx, dz);
-		}
-
-		private int OctileDistance(int dx, int dz)
-		{
-			return (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dz));
-		}
-
+		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dz));
 	}
 }

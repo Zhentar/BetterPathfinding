@@ -199,7 +199,7 @@ namespace BetterPathfinding
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
-			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + result.TotalCost + " path cost!");
+			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
 			Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
 			temp.Dispose();
@@ -211,7 +211,6 @@ namespace BetterPathfinding
 
 		private static PawnPath FindPathInner(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, HeuristicMode mode = HeuristicMode.Better)
 		{
-			//return _FindPathAdmissableVanilla(start, dest, traverseParms, peMode);
 			if (DebugSettings.pathThroughWalls) {
 				traverseParms.mode = TraverseMode.PassAnything;
 			}

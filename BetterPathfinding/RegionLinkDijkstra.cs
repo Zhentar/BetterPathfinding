@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace BetterPathfinding
@@ -39,14 +40,14 @@ namespace BetterPathfinding
 
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
 
-		private Func<RegionLink, RegionLink, int> distanceGetter;
+		private Func<int, int, int> costCalculator;
 		private Func<IntVec3, RegionLink, int> cellDistanceGetter;
 
 		public static int nodes_popped;
 
-		public RegionLinkDijkstra(IntVec3 rootCell, Func<RegionLink, RegionLink, int> distance, Func<IntVec3, RegionLink, int> cellDistance)
+		public RegionLinkDijkstra(IntVec3 rootCell, Func<int, int, int> cost, Func<IntVec3, RegionLink, int> cellDistance)
 		{
-			this.distanceGetter = distance;
+			this.costCalculator = cost;
 			this.cellDistanceGetter = cellDistance;
 
 			nodes_popped = 0;
@@ -81,15 +82,7 @@ namespace BetterPathfinding
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
-						int addedCost;
-						if (destRegion.portal != null)
-						{
-							addedCost = GetPortalCost(destRegion.portal);
-						}
-						else
-						{
-							addedCost = distanceGetter(vertex.Link, current2);
-						}
+						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2);
 						int newCost = knownBest + addedCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
@@ -122,7 +115,19 @@ namespace BetterPathfinding
 
 		private int GetPortalCost(Building_Door portal)
 		{
-			return portal.TicksToOpenNow + 13 /*TODO: moveCostCardinal*/;
+			return portal.TicksToOpenNow + costCalculator(1,0);
 		}
+
+		private int RegionLinkDistance(RegionLink a, RegionLink b)
+		{
+			int dx = Mathf.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
+			int dz = Mathf.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
+
+			return costCalculator(dx, dz);
+		}
+
+		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
+
+		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
 	}
 }
