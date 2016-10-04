@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using RimWorld;
 using Verse;
 
 namespace BetterPathfinding
@@ -74,13 +75,22 @@ namespace BetterPathfinding
 				nodes_popped++;
 				int knownBest = distances[vertex.Link];
 				var destRegion = Equals(vertex.FromRegion, vertex.Link.RegionA) ? vertex.Link.RegionB : vertex.Link.RegionA;
-				if (vertex.Cost == knownBest)
+				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
 				{
-					//Will this ever not be true? - Yes. Not sure why. 
+					//TODO: pass in the traverse parms so we can properly consider door restrictions
 					foreach (var current2 in destRegion.links)
 					{
-						//if (current2 == vertex.Link) { continue; }
-						int newCost = knownBest + distanceGetter(vertex.Link, current2);
+						if (current2 == vertex.Link) { continue; }
+						int addedCost;
+						if (destRegion.portal != null)
+						{
+							addedCost = GetPortalCost(destRegion.portal);
+						}
+						else
+						{
+							addedCost = distanceGetter(vertex.Link, current2);
+						}
+						int newCost = knownBest + addedCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
 						{
@@ -108,6 +118,11 @@ namespace BetterPathfinding
 			}
 
 			return 100000;
+		}
+
+		private int GetPortalCost(Building_Door portal)
+		{
+			return portal.TicksToOpenNow + 13 /*TODO: moveCostCardinal*/;
 		}
 	}
 }
