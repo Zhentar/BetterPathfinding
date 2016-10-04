@@ -114,17 +114,26 @@ namespace BetterPathfinding
 			return 100000;
 		}
 
+		//If we just use the pawn move speed as the path cost, we're effectively telling A* "there might be a road around here somewhere, keep looking!"
+		//This makes it expand a whole lot more nodes than necessary in open, rough terrain, searching high and low for that alleged road.
+		//Finding the minimum path cost of any tile in the region is a cheap way to guess if that road could possibly exist.
+		//This could be cached across pathfinding calls, but I'd need extra detours to invalidate it and it apparently performs adequately without it.
 		private int RegionMinimumPathCost(Region region)
 		{
 			int minCost = 10000;
-			foreach (var cell in region.Cells) //TODO: we're converting indices to cells back to indices here, easy optimization
-			{
-				minCost = Mathf.Min(minCost, Find.PathGrid.PerceivedPathCostAt(cell));
-				if (minCost == 0)
+
+			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
+				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
-					return 0;
+					int index = CellIndices.CellToIndex(x, z);
+					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index]);
+					if (minCost == 0) 
+					{
+						return 0;
+					}
 				}
 			}
+
 			return minCost;
 		}
 

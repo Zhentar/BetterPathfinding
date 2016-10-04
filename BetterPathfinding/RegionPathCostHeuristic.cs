@@ -80,8 +80,8 @@ namespace BetterPathfinding
 
 			return 1000000; //shouldn't happen except for sappers
 		}
+		
 
-		//TODO: calculate to the closest point of the edge
 		private int RegionLinkDistance(IntVec3 cell, RegionLink link)
 		{
 			int dx, dz;
