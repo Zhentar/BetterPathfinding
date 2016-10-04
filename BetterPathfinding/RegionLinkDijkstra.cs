@@ -78,11 +78,12 @@ namespace BetterPathfinding
 				var destRegion = Equals(vertex.FromRegion, vertex.Link.RegionA) ? vertex.Link.RegionB : vertex.Link.RegionA;
 				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
 				{
+					var minPathCost = RegionMinimumPathCost(destRegion);
 					//TODO: pass in the traverse parms so we can properly consider door restrictions
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
-						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2);
+						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						int newCost = knownBest + addedCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
@@ -113,17 +114,31 @@ namespace BetterPathfinding
 			return 100000;
 		}
 
+		private int RegionMinimumPathCost(Region region)
+		{
+			int minCost = 10000;
+			foreach (var cell in region.Cells) //TODO: we're converting indices to cells back to indices here, easy optimization
+			{
+				minCost = Mathf.Min(minCost, Find.PathGrid.PerceivedPathCostAt(cell));
+				if (minCost == 0)
+				{
+					return 0;
+				}
+			}
+			return minCost;
+		}
+
 		private int GetPortalCost(Building_Door portal)
 		{
 			return portal.TicksToOpenNow + costCalculator(1,0);
 		}
 
-		private int RegionLinkDistance(RegionLink a, RegionLink b)
+		private int RegionLinkDistance(RegionLink a, RegionLink b, int minPathCost)
 		{
 			int dx = Mathf.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
 			int dz = Mathf.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
 
-			return costCalculator(dx, dz);
+			return costCalculator(dx, dz) + minPathCost * Mathf.Max(dx, dz);
 		}
 
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
