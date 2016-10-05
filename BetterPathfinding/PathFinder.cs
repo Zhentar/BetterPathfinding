@@ -30,7 +30,7 @@ namespace BetterPathfinding
 			public IntVec3 parentPosition;
 		}
 
-		internal class PathFinderNodeFastCostComparer : IComparer<int>
+		private class PathFinderNodeFastCostComparer : IComparer<CostNode>
 		{
 			private PathFinderNodeFast[] grid;
 
@@ -39,19 +39,32 @@ namespace BetterPathfinding
 				this.grid = grid;
 			}
 
-			public int Compare(int a, int b)
+			public int Compare(CostNode a, CostNode b)
 			{
-				if (this.grid[a].totalCostEstimate > this.grid[b].totalCostEstimate) {
+				if (a.totalCostEstimate > b.totalCostEstimate) {
 					return 1;
 				}
-				if (this.grid[a].totalCostEstimate < this.grid[b].totalCostEstimate) {
+				if (a.totalCostEstimate < b.totalCostEstimate) {
 					return -1;
 				}
 				return 0;
 			}
 		}
 
-		private static FastPriorityQueue<int> openList;
+		private struct CostNode
+		{
+			public CostNode(int index, int cost)
+			{
+				gridIndex = index;
+				totalCostEstimate = cost;
+			}
+
+			public int totalCostEstimate;
+
+			public int gridIndex;
+		}
+
+		private static FastPriorityQueue<CostNode> openList;
 
 		private static PathFinderNodeFast[] calcGrid;
 
@@ -162,7 +175,7 @@ namespace BetterPathfinding
 			mapSizeX = Find.Map.Size.x;
 			mapSizeZ = Find.Map.Size.z;
 			calcGrid = new PathFinderNodeFast[gridSizeX * gridSizeZ];
-			openList = new FastPriorityQueue<int>(new PathFinderNodeFastCostComparer(calcGrid));
+			openList = new FastPriorityQueue<CostNode>(new PathFinderNodeFastCostComparer(calcGrid));
 		}
 
 		private enum HeuristicMode
@@ -293,7 +306,7 @@ namespace BetterPathfinding
 			calcGrid[curIndex].parentX = (ushort)start.x;
 			calcGrid[curIndex].parentZ = (ushort)start.z;
 			calcGrid[curIndex].status = statusOpenValue;
-			openList.Push(curIndex);
+			openList.Push(new CostNode(curIndex, 0));
 			Area area = null;
 			if (pawn != null && pawn.playerSettings != null && !pawn.Drafted) {
 				area = pawn.playerSettings.AreaRestriction;
@@ -309,7 +322,7 @@ namespace BetterPathfinding
 				}
 				debug_totalOpenListCount += openList.Count;
 				debug_openCellsPopped++;
-				curIndex = openList.Pop();
+				curIndex = openList.Pop().gridIndex;
 				if (calcGrid[curIndex].status == statusClosedValue) {
 					PfProfilerEndSample();
 				}
@@ -317,8 +330,32 @@ namespace BetterPathfinding
 					curIntVec3 = CellIndices.IndexToCell(curIndex);
 					curX = (ushort)curIntVec3.x;
 					curZ = (ushort)curIntVec3.z;
-					if (DebugViewSettings.drawPaths) {
-						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, calcGrid[curIndex].knownCost.ToString());
+					if (DebugViewSettings.drawPaths && !disableDebugFlash)
+					{
+						//draw backpointer
+						char arrow;
+						int parX = calcGrid[curIndex].parentX;
+						int parZ = calcGrid[curIndex].parentZ;
+						if (parX < curX)
+						{
+							if (parZ < curZ) arrow = '↙';
+							else if (parZ > curZ) arrow = '↖';
+							else arrow = '←';
+						}
+						else if (parX > curX)
+						{
+
+							if (parZ < curZ) arrow = '↘';
+							else if (parZ > curZ) arrow = '↗';
+							else arrow = '→';
+						}
+						else
+						{
+							if (parZ < curZ) arrow = '↓';
+							else if (parZ > curZ) arrow = '↑';
+							else arrow = '⥁'; //unpossible
+						}
+						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, calcGrid[curIndex].knownCost + " " + arrow);
 					}
 					if (destinationIsOneCell) {
 						if (curIndex == destinationIndex) {
@@ -346,7 +383,7 @@ namespace BetterPathfinding
 						if (neighX >= mapSizeX || neighZ >= mapSizeZ) {
 							DebugFlash(intVec, 0.75f, "oob");
 						}
-						else if (calcGrid[neighIndex].status != statusClosedValue) {
+						else if (calcGrid[neighIndex].status != statusClosedValue || mode == HeuristicMode.Better) {
 							int cost = 0;
 							bool notWalkable = false;
 							if (!pathGrid.WalkableFast(intVec)) {
@@ -458,42 +495,53 @@ namespace BetterPathfinding
 								PfProfilerEndSample();
 							}
 							neighCostThroughCur = neighCost + calcGrid[curIndex].knownCost;
-							if ((calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue) || calcGrid[neighIndex].knownCost > neighCostThroughCur) {
-								int status = calcGrid[neighIndex].status;
+
+							if ((calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue) || calcGrid[neighIndex].knownCost > neighCostThroughCur)
+							{
 								calcGrid[neighIndex].parentX = curX;
 								calcGrid[neighIndex].parentZ = curZ;
-								calcGrid[neighIndex].knownCost = neighCostThroughCur;
-								calcGrid[neighIndex].status = statusOpenValue;
-								switch (mode)
+
+								if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 								{
-									case HeuristicMode.Vanilla:
-										h = heuristicStrength * (Mathf.Abs(neighX - destinationX) + Mathf.Abs(neighZ - destinationZ));
-										break;
-									case HeuristicMode.AdmissableOctile:
+									h = calcGrid[neighIndex].totalCostEstimate - calcGrid[neighIndex].knownCost;
+								}
+								else
+								{
+									switch (mode)
+									{
+										case HeuristicMode.Vanilla:
+											h = heuristicStrength*(Mathf.Abs(neighX - destinationX) + Mathf.Abs(neighZ - destinationZ));
+											break;
+										case HeuristicMode.AdmissableOctile:
 										{
 											var dx = Mathf.Abs(neighX - destinationX);
 											var dy = Mathf.Abs(neighZ - destinationZ);
 											h = moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy);
 										}
-										break;
-									case HeuristicMode.Better:
-										if (canPassAnything) {
-											var dx = Mathf.Abs(neighX - destinationX);
-											var dy = Mathf.Abs(neighZ - destinationZ);
-											h = heuristicStrength *
-												(moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dy));
-										}
-										else {
-											h = regionCost.GetPathCostToRegion(neighIndex);
-											//DebugFlash(intVec, h / 1500f, h.ToString());
-										}
-										break;
+											break;
+										case HeuristicMode.Better:
+											if (canPassAnything)
+											{
+												var dx = Mathf.Abs(neighX - destinationX);
+												var dy = Mathf.Abs(neighZ - destinationZ);
+												h = heuristicStrength*
+												    (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy));
+											}
+											else
+											{
+												h = regionCost.GetPathCostToRegion(neighIndex);
+												//DebugFlash(intVec, h / 1500f, h.ToString());
+											}
+											break;
+									}
 								}
-								
+
+								calcGrid[neighIndex].knownCost = neighCostThroughCur;
+								calcGrid[neighIndex].status = statusOpenValue;
 								calcGrid[neighIndex].totalCostEstimate = neighCostThroughCur + h;
-								if (status != statusOpenValue) {
-									openList.Push(neighIndex);
-								}
+
+								//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
+								openList.Push(new CostNode(neighIndex, neighCostThroughCur + h));
 							}
 						}
 					}
@@ -565,7 +613,7 @@ namespace BetterPathfinding
 		{
 			if (DebugViewSettings.drawPaths) {
 				while (openList.Count > 0) {
-					int num = openList.Pop();
+					int num = openList.Pop().gridIndex;
 					IntVec3 c = new IntVec3(num & gridSizeXMinus1, 0, num >> gridSizeZLog2);
 					Find.DebugDrawer.FlashCell(c, 0f, "open");
 				}
