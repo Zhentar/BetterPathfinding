@@ -16,12 +16,14 @@ namespace BetterPathfinding
 			public Region FromRegion;
 			public RegionLink Link;
 			public int Cost;
+            public int EstimatedPathCost;
 
-			public RegionLinkQueueEntry(Region from, RegionLink l, int c)
+			public RegionLinkQueueEntry(Region from, RegionLink l, int c, int tc)
 			{
 				FromRegion = from;
 				Link = l;
 				Cost = c;
+                EstimatedPathCost = tc;
 			}
 		}
 
@@ -30,7 +32,7 @@ namespace BetterPathfinding
 		{
 			public int Compare(RegionLinkQueueEntry a, RegionLinkQueueEntry b)
 			{
-				return a.Cost.CompareTo(b.Cost);
+				return a.EstimatedPathCost.CompareTo(b.EstimatedPathCost);
 			}
 		}
 
@@ -44,12 +46,15 @@ namespace BetterPathfinding
 
         private TraverseParms traverseParms;
 
+        private IntVec3 targetCell;
+
 		public static int nodes_popped;
 
-		public RegionLinkDijkstra(IntVec3 rootCell, TraverseParms parms, Func<int, int, int> cost)
+		public RegionLinkDijkstra(IntVec3 rootCell, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
 			this.costCalculator = cost;
             this.traverseParms = parms;
+            this.targetCell = target;
 
 			nodes_popped = 0;
 
@@ -60,7 +65,7 @@ namespace BetterPathfinding
 				foreach (RegionLink current in region.links) {
 					var dist = RegionLinkDistance(rootCell, current, cost);
 					distances.Add(current, dist);
-					queue.Push(new RegionLinkQueueEntry(region, current, dist));
+					queue.Push(new RegionLinkQueueEntry(region, current, dist, dist));
 				}
 			}
 		}
@@ -78,7 +83,7 @@ namespace BetterPathfinding
 				int knownBest = distances[vertex.Link];
 				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
                 {
-                    var destRegion = Equals(vertex.FromRegion, vertex.Link.RegionA) ? vertex.Link.RegionB : vertex.Link.RegionA;
+                    var destRegion = GetLinkOtherRegion(vertex.FromRegion, vertex.Link);
 
                     //TODO: lying about destination to avoid danger check... should it work this way?
                     if (destRegion.portal != null && !destRegion.Allows(traverseParms, true))
@@ -87,25 +92,25 @@ namespace BetterPathfinding
                     }
 
 					var minPathCost = RegionMinimumPathCost(destRegion);
-					//TODO: pass in the traverse parms so we can properly consider door restrictions
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
 						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						int newCost = knownBest + addedCost;
+                        int pathCost = RegionLinkDistance(targetCell, current2, costCalculator) + newCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
 						{
 							if (newCost < oldCost)
 							{
 								distances[current2] = newCost;
-								queue.Push(new RegionLinkQueueEntry(destRegion, current2, newCost));
+								queue.Push(new RegionLinkQueueEntry(destRegion, current2, newCost, pathCost));
 							}
 						}
 						else
 						{
 							distances.Add(current2, newCost);
-							queue.Push(new RegionLinkQueueEntry(destRegion, current2, newCost));
+							queue.Push(new RegionLinkQueueEntry(destRegion, current2, newCost, pathCost));
 						}
 					}
 					//if this is the first vertex popped for the region, we've found the shortest path to that region
@@ -180,5 +185,6 @@ namespace BetterPathfinding
 
         private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
 
+        private static Region GetLinkOtherRegion(Region fromRegion, RegionLink link) =>  Equals(fromRegion, link.RegionA) ? link.RegionB : link.RegionA;
     }
 }

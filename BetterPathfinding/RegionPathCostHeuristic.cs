@@ -56,7 +56,7 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch = Stopwatch.StartNew();
 #endif
-				distanceBuilder = new RegionLinkDijkstra(targetCell, traverseParms, OctileDistance);
+				distanceBuilder = new RegionLinkDijkstra(targetCell, startCell, traverseParms, OctileDistance);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
