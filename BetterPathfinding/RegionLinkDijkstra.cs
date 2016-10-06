@@ -41,14 +41,15 @@ namespace BetterPathfinding
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
 
 		private Func<int, int, int> costCalculator;
-		private Func<IntVec3, RegionLink, int> cellDistanceGetter;
+
+        private TraverseParms traverseParms;
 
 		public static int nodes_popped;
 
-		public RegionLinkDijkstra(IntVec3 rootCell, Func<int, int, int> cost, Func<IntVec3, RegionLink, int> cellDistance)
+		public RegionLinkDijkstra(IntVec3 rootCell, TraverseParms parms, Func<int, int, int> cost)
 		{
 			this.costCalculator = cost;
-			this.cellDistanceGetter = cellDistance;
+            this.traverseParms = parms;
 
 			nodes_popped = 0;
 
@@ -57,7 +58,7 @@ namespace BetterPathfinding
 			var startingRegions = new[] { rootRegion };
 			foreach (var region in startingRegions) {
 				foreach (RegionLink current in region.links) {
-					var dist = cellDistanceGetter(rootCell, current);
+					var dist = RegionLinkDistance(rootCell, current, cost);
 					distances.Add(current, dist);
 					queue.Push(new RegionLinkQueueEntry(region, current, dist));
 				}
@@ -75,9 +76,16 @@ namespace BetterPathfinding
 				var vertex = queue.Pop();
 				nodes_popped++;
 				int knownBest = distances[vertex.Link];
-				var destRegion = Equals(vertex.FromRegion, vertex.Link.RegionA) ? vertex.Link.RegionB : vertex.Link.RegionA;
 				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
-				{
+                {
+                    var destRegion = Equals(vertex.FromRegion, vertex.Link.RegionA) ? vertex.Link.RegionB : vertex.Link.RegionA;
+
+                    //TODO: lying about destination to avoid danger check... should it work this way?
+                    if (destRegion.portal != null && !destRegion.Allows(traverseParms, true))
+                    {
+                        continue;
+                    }
+
 					var minPathCost = RegionMinimumPathCost(destRegion);
 					//TODO: pass in the traverse parms so we can properly consider door restrictions
 					foreach (var current2 in destRegion.links)
@@ -118,7 +126,7 @@ namespace BetterPathfinding
 		//This makes it expand a whole lot more nodes than necessary in open, rough terrain, searching high and low for that alleged road.
 		//Finding the minimum path cost of any tile in the region is a cheap way to guess if that road could possibly exist.
 		//This could be cached across pathfinding calls, but I'd need extra detours to invalidate it and it apparently performs adequately without it.
-		private int RegionMinimumPathCost(Region region)
+		public static int RegionMinimumPathCost(Region region)
 		{
 			int minCost = 10000;
 
@@ -153,5 +161,24 @@ namespace BetterPathfinding
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
-	}
+
+        public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost)
+        {
+            int dx, dz;
+            if (link.span.dir == SpanDirection.North)
+            {
+                dx = Mathf.Abs(cell.x - link.span.root.x);
+                dz = GetValue(cell.z, link.span.root.z, link.span.length);
+            }
+            else
+            {
+                dz = Mathf.Abs(cell.z - link.span.root.z);
+                dx = GetValue(cell.x, link.span.root.x, link.span.length);
+            }
+            return cost(dx, dz);
+        }
+
+        private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
+
+    }
 }

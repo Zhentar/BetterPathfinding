@@ -300,7 +300,7 @@ namespace BetterPathfinding
 				moveTicksDiagonal = 18;
 			}
 
-			regionCost = new RegionPathCostHeuristic(start, dest.Cell, moveTicksCardinal, moveTicksDiagonal);
+			regionCost = new RegionPathCostHeuristic(start, dest.Cell, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].totalCostEstimate = 0;
 			calcGrid[curIndex].parentX = (ushort)start.x;

@@ -24,10 +24,11 @@ namespace BetterPathfinding
 		private int lastRegionId = -1;
 		private RegionLink minLink;
 		private int minCost = -1;
+        private TraverseParms traverseParms;
 
-		public static Stopwatch DijkstraStopWatch;
+        public static Stopwatch DijkstraStopWatch;
 
-		public RegionPathCostHeuristic(IntVec3 start, IntVec3 end, int cardinal, int diagonal)
+		public RegionPathCostHeuristic(IntVec3 start, IntVec3 end, TraverseParms parms, int cardinal, int diagonal)
 		{
 			startCell = start;
 			targetCell = end;
@@ -35,6 +36,7 @@ namespace BetterPathfinding
 			moveTicksDiagonal = diagonal;
 			regionGrid = Find.RegionGrid;
 			rootRegion = regionGrid.GetValidRegionAt(end);
+            traverseParms = parms;
 		}
 
 		public int GetPathCostToRegion(int cellIndex)
@@ -54,7 +56,7 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch = Stopwatch.StartNew();
 #endif
-				distanceBuilder = new RegionLinkDijkstra(targetCell, OctileDistance, RegionLinkDistance);
+				distanceBuilder = new RegionLinkDijkstra(targetCell, traverseParms, OctileDistance);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
@@ -74,32 +76,13 @@ namespace BetterPathfinding
 
 			if (minLink != null)
 			{
-				var linkCost = RegionLinkDistance(cell, minLink);
+				var linkCost = RegionLinkDijkstra.RegionLinkDistance(cell, minLink, OctileDistance);
 				return minCost + linkCost;
 			}
 
 			return 1000000; //shouldn't happen except for sappers
 		}
 		
-
-		private int RegionLinkDistance(IntVec3 cell, RegionLink link)
-		{
-			int dx, dz;
-			if (link.span.dir == SpanDirection.North)
-			{
-				dx = Mathf.Abs(cell.x - link.span.root.x);
-				dz = GetValue(cell.z, link.span.root.z, link.span.length);
-			}
-			else
-			{
-				dz = Mathf.Abs(cell.z - link.span.root.z);
-				dx = GetValue(cell.x, link.span.root.x, link.span.length);
-			}
-			return OctileDistance(dx, dz);
-		}
-
-		private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
-
 		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dz));
 	}
 }
