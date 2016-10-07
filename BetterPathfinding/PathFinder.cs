@@ -213,8 +213,11 @@ namespace BetterPathfinding
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
 			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-			Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
-			Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
+            if (traverseParms.mode != TraverseMode.PassAnything && !DebugSettings.pathThroughWalls)
+            {
+                Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
+                Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
+            }
 			temp.Dispose();
 			disableDebugFlash = false;
 #endif
@@ -524,8 +527,7 @@ namespace BetterPathfinding
 											{
 												var dx = Mathf.Abs(neighX - destinationX);
 												var dy = Mathf.Abs(neighZ - destinationZ);
-												h = heuristicStrength*
-												    (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy));
+												h = (int)(1.5 * (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy)));
 											}
 											else
 											{
