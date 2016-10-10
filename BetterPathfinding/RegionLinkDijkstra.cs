@@ -60,10 +60,12 @@ namespace BetterPathfinding
 
 			var rootRegion = Find.RegionGrid.GetValidRegionAt(rootCell);
 
-			var startingRegions = new[] { rootRegion };
+            var minPathCost = RegionMinimumPathCost(rootRegion);
+
+            var startingRegions = new[] { rootRegion };
 			foreach (var region in startingRegions) {
 				foreach (RegionLink current in region.links) {
-					var dist = RegionLinkDistance(rootCell, current, cost);
+					var dist = RegionLinkDistance(rootCell, current, cost, minPathCost);
 					distances.Add(current, dist);
 					queue.Push(new RegionLinkQueueEntry(region, current, dist, dist));
 				}
@@ -97,7 +99,7 @@ namespace BetterPathfinding
 						if (current2 == vertex.Link) { continue; }
 						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						int newCost = knownBest + addedCost;
-                        int pathCost = RegionLinkDistance(targetCell, current2, costCalculator) + newCost;
+                        int pathCost = RegionLinkDistance(targetCell, current2, costCalculator, 0) + newCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
 						{
@@ -167,7 +169,7 @@ namespace BetterPathfinding
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
 
-        public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost)
+        public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
         {
             int dx, dz;
             if (link.span.dir == SpanDirection.North)
