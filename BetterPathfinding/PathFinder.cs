@@ -213,10 +213,11 @@ namespace BetterPathfinding
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
 			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-            if (traverseParms.mode != TraverseMode.PassAnything && !DebugSettings.pathThroughWalls)
+            if (RegionPathCostHeuristic.DijkstraStopWatch != null)
             {
                 Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
                 Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
+                RegionPathCostHeuristic.DijkstraStopWatch = null;
             }
 			temp.Dispose();
 			disableDebugFlash = false;
@@ -386,7 +387,7 @@ namespace BetterPathfinding
 						if (neighX >= mapSizeX || neighZ >= mapSizeZ) {
 							DebugFlash(intVec, 0.75f, "oob");
 						}
-						else if (calcGrid[neighIndex].status != statusClosedValue || mode == HeuristicMode.Better) {
+						else if (calcGrid[neighIndex].status != statusClosedValue || (mode == HeuristicMode.Better && !canPassAnything)) {
 							int cost = 0;
 							bool notWalkable = false;
 							if (!pathGrid.WalkableFast(intVec)) {
@@ -530,9 +531,9 @@ namespace BetterPathfinding
 												h = (int)(1.5 * (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy)));
 											}
 											else
-											{
-												h = regionCost.GetPathCostToRegion(neighIndex);
-												//DebugFlash(intVec, h / 1500f, h.ToString());
+                                            {
+                                                h = regionCost.GetPathCostToRegion(neighIndex);
+												//DebugFlash(intVec, neighCostThroughCur + h / 1500f, (neighCostThroughCur + h).ToString());
 											}
 											break;
 									}
