@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -274,9 +275,11 @@ namespace BetterPathfinding
 			if (peMode == PathEndMode.Touch) {
 				destinationRect = destinationRect.ExpandedBy(1);
 			}
-			if (mode == HeuristicMode.Better && Find.RegionGrid.GetValidRegionAt(dest.Cell) == null)
-			{ //TODO: handle path end touch to no region tiles.
+			//Pretty sure this shouldn't be able to happen...
+			if (mode == HeuristicMode.Better && !canPassAnything && destinationRect.Cells.All(c => Find.RegionGrid.GetRegionAt_InvalidAllowed(c) == null))
+			{
 				mode = HeuristicMode.Vanilla;
+				Log.Warning("Pathfinding destination not in region, must fall back to vanilla!");
 			}
 			destinationIsOneCell = (destinationRect.Width == 1 && destinationRect.Height == 1);
 			pathGrid = Find.PathGrid;
@@ -313,7 +316,7 @@ namespace BetterPathfinding
 				heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength / (float)moveTicksCardinal));
 			}
 
-			regionCost = new RegionPathCostHeuristic(start, dest.Cell, traverseParms, moveTicksCardinal, moveTicksDiagonal);
+			regionCost = new RegionPathCostHeuristic(start, destinationRect, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].heuristicCost = 0;
 			calcGrid[curIndex].parentX = (ushort)start.x;

@@ -17,7 +17,7 @@ namespace BetterPathfinding
 
 		private readonly RegionGrid regionGrid;
 
-		private readonly Region rootRegion;
+		private readonly IEnumerable<Region> rootRegions;
 
 		private RegionLinkDijkstra distanceBuilder;
 
@@ -29,14 +29,14 @@ namespace BetterPathfinding
 
         public static Stopwatch DijkstraStopWatch;
 
-		public RegionPathCostHeuristic(IntVec3 start, IntVec3 end, TraverseParms parms, int cardinal, int diagonal)
+		public RegionPathCostHeuristic(IntVec3 start, CellRect end, TraverseParms parms, int cardinal, int diagonal)
 		{
 			startCell = start;
-			targetCell = end;
+			targetCell = end.CenterCell;
 			moveTicksCardinal = cardinal;
 			moveTicksDiagonal = diagonal;
 			regionGrid = Find.RegionGrid;
-			rootRegion = regionGrid.GetValidRegionAt(end);
+			rootRegions = new HashSet<Region>(end.Cells.Select(c => regionGrid.GetRegionAt_InvalidAllowed(c)).Where(r => r != null));
             traverseParms = parms;
 		}
 
@@ -46,7 +46,7 @@ namespace BetterPathfinding
 
 			var region = regionGrid.GetValidRegionAt_NoRebuild(cell);
 
-			if (region.Equals(rootRegion))
+			if (rootRegions.Contains(region))
 			{
 				var dx = Mathf.Abs(cell.x - targetCell.x);
 				var dz = Mathf.Abs(cell.z - targetCell.z);
@@ -57,7 +57,7 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch = Stopwatch.StartNew();
 #endif
-				distanceBuilder = new RegionLinkDijkstra(targetCell, startCell, traverseParms, OctileDistance);
+				distanceBuilder = new RegionLinkDijkstra(targetCell, rootRegions, startCell, traverseParms, OctileDistance);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif

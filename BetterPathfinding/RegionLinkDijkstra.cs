@@ -52,24 +52,25 @@ namespace BetterPathfinding
 
 		public static int nodes_popped;
 
-		public RegionLinkDijkstra(IntVec3 rootCell, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
+		public RegionLinkDijkstra(IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
 			avoidGrid = parms.pawn?.GetAvoidGrid();
-
 			nodes_popped = 0;
-
-			var rootRegion = Find.RegionGrid.GetValidRegionAt(rootCell);
-
-            var minPathCost = RegionMinimumPathCost(rootRegion);
-
-            var startingRegions = new[] { rootRegion };
-			foreach (var region in startingRegions) {
-				foreach (RegionLink current in region.links) {
+			
+			foreach (var region in startingRegions)
+			{
+				var minPathCost = RegionMinimumPathCost(region);
+				foreach (RegionLink current in region.links) 
+				{
 					var dist = RegionLinkDistance(rootCell, current, cost, minPathCost);
-					distances.Add(current, dist);
+					if (distances.ContainsKey(current))
+					{
+						 dist = Math.Min(distances[current], dist);
+					}
+					distances[current] = dist;
 					queue.Push(new RegionLinkQueueEntry(region, current, dist, dist));
 				}
 			}
