@@ -191,6 +191,10 @@ namespace BetterPathfinding
 			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 
 #if DEBUG
+			if (traverseParms.pawn != null)
+			{
+				Log.Message("Pathfinding times for pawn " + traverseParms.pawn.Name);
+			}
 			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
 
@@ -255,7 +259,7 @@ namespace BetterPathfinding
 			}
 
 
-			ByteGrid byteGrid = pawn?.GetAvoidGrid();
+			ByteGrid avoidGrid = pawn?.GetAvoidGrid();
 			PfProfilerBeginSample(string.Concat("FindPath for ", pawn, " from ", start, " to ", dest, (!dest.HasThing) ? string.Empty : (" at " + dest.Cell)));
 			destinationX = dest.Cell.x;
 			destinationZ = dest.Cell.z;
@@ -302,6 +306,11 @@ namespace BetterPathfinding
 			else {
 				moveTicksCardinal = 13;
 				moveTicksDiagonal = 18;
+			}
+
+			if (mode == HeuristicMode.Better)
+			{   //Roughly preserves the Vanilla behavior of increasing path accuracy for shorter paths and slower pawns, though not as smoothly
+				heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength / (float)moveTicksCardinal));
 			}
 
 			regionCost = new RegionPathCostHeuristic(start, dest.Cell, traverseParms, moveTicksCardinal, moveTicksDiagonal);
@@ -398,12 +407,11 @@ namespace BetterPathfinding
 								notWalkable = true;
 								cost += 60;
 								Thing edifice = intVec.GetEdifice();
-								if (edifice != null) {
-									if (!edifice.def.useHitPoints) {
-										continue;
-									}
-									cost += (int)(edifice.HitPoints * 0.1f);
+								if (edifice == null || !edifice.def.useHitPoints)
+								{
+									continue;
 								}
+								cost += (int)(edifice.HitPoints * 0.1f);
 							}
 							if (i > 3) {
 								switch (i) {
@@ -446,8 +454,8 @@ namespace BetterPathfinding
 							if (!notWalkable) {
 								neighCost += pathGridDirect[neighIndex];
 							}
-							if (byteGrid != null) {
-								neighCost += byteGrid[neighIndex] * 8;
+							if (avoidGrid != null) {
+								neighCost += avoidGrid[neighIndex] * 8;
 							}
 							if (area != null && !area[intVec]) {
 								neighCost += 600;
@@ -528,7 +536,7 @@ namespace BetterPathfinding
 											{
 												var dx = Mathf.Abs(neighX - destinationX);
 												var dy = Mathf.Abs(neighZ - destinationZ);
-												h = (int)(1.5 * (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy)));
+												h = heuristicStrength * (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy));
 											}
 											else
                                             {
@@ -585,10 +593,10 @@ namespace BetterPathfinding
 				pathFinderNode.position = parentPosition;
 				newPath.AddNode(pathFinderNode.position);
 
-				actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
-				prevKnownCost = pathFinderNodeFast.knownCost;
-				var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
-				DebugFlash(parentPosition, hDiscrepancy/150f, hDiscrepancy + " ( " + actualCost + " - " + pathFinderNodeFast.heuristicCost);
+				//actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
+				//prevKnownCost = pathFinderNodeFast.knownCost;
+				//var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
+				//DebugFlash(parentPosition, hDiscrepancy / 150f, hDiscrepancy + " (" + actualCost + "-" + pathFinderNodeFast.heuristicCost + ")");
 				if (pathFinderNode.position == pathFinderNode.parentPosition) {
 					break;
 				}
