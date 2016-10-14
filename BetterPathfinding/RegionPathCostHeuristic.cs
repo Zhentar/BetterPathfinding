@@ -73,7 +73,7 @@ namespace BetterPathfinding
 				DijkstraStopWatch.Stop();
 #endif
 
-                minPathCost = RegionLinkDijkstra.RegionMinimumPathCost(region);
+                minPathCost = distanceBuilder.RegionMinimumPathCost(region);
                 lastRegionId = region.id;
 			}
 

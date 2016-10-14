@@ -48,6 +48,8 @@ namespace BetterPathfinding
 
         private IntVec3 targetCell;
 
+		private ByteGrid avoidGrid;
+
 		public static int nodes_popped;
 
 		public RegionLinkDijkstra(IntVec3 rootCell, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
@@ -55,6 +57,7 @@ namespace BetterPathfinding
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
+			avoidGrid = parms.pawn?.GetAvoidGrid();
 
 			nodes_popped = 0;
 
@@ -133,7 +136,7 @@ namespace BetterPathfinding
 		//This makes it expand a whole lot more nodes than necessary in open, rough terrain, searching high and low for that alleged road.
 		//Finding the minimum path cost of any tile in the region is a cheap way to guess if that road could possibly exist.
 		//This could be cached across pathfinding calls, but I'd need extra detours to invalidate it and it apparently performs adequately without it.
-		public static int RegionMinimumPathCost(Region region)
+		public int RegionMinimumPathCost(Region region)
 		{
 			int minCost = 10000;
 
@@ -141,7 +144,7 @@ namespace BetterPathfinding
 				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
 					int index = CellIndices.CellToIndex(x, z);
-					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index]);
+					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
 					if (minCost == 0) 
 					{
 						return 0;
