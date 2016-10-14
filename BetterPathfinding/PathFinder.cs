@@ -14,7 +14,7 @@ namespace BetterPathfinding
 		{
 			public int knownCost;
 
-			public int totalCostEstimate;
+			public int heuristicCost;
 
 			public ushort parentX;
 
@@ -306,7 +306,7 @@ namespace BetterPathfinding
 
 			regionCost = new RegionPathCostHeuristic(start, dest.Cell, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 			calcGrid[curIndex].knownCost = 0;
-			calcGrid[curIndex].totalCostEstimate = 0;
+			calcGrid[curIndex].heuristicCost = 0;
 			calcGrid[curIndex].parentX = (ushort)start.x;
 			calcGrid[curIndex].parentZ = (ushort)start.z;
 			calcGrid[curIndex].status = statusOpenValue;
@@ -507,7 +507,7 @@ namespace BetterPathfinding
 
 								if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 								{
-									h = calcGrid[neighIndex].totalCostEstimate - calcGrid[neighIndex].knownCost;
+									h = calcGrid[neighIndex].heuristicCost;
 								}
 								else
 								{
@@ -541,7 +541,7 @@ namespace BetterPathfinding
 
 								calcGrid[neighIndex].knownCost = neighCostThroughCur;
 								calcGrid[neighIndex].status = statusOpenValue;
-								calcGrid[neighIndex].totalCostEstimate = neighCostThroughCur + h;
+								calcGrid[neighIndex].heuristicCost = h;
 
 								//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
 								openList.Push(new CostNode(neighIndex, neighCostThroughCur + h));
@@ -576,12 +576,19 @@ namespace BetterPathfinding
 		{
 			newPath = PawnPathPool.GetEmptyPawnPath();
 			IntVec3 parentPosition = new IntVec3(curX, 0, curZ);
+			int prevKnownCost = calcGrid[CellIndices.CellToIndex(parentPosition)].knownCost;
+			int actualCost = 0;
 			while (true) {
 				PathFinderNodeFast pathFinderNodeFast = calcGrid[CellIndices.CellToIndex(parentPosition)];
 				PathFinderNode pathFinderNode;
 				pathFinderNode.parentPosition = new IntVec3(pathFinderNodeFast.parentX, 0, pathFinderNodeFast.parentZ);
 				pathFinderNode.position = parentPosition;
 				newPath.AddNode(pathFinderNode.position);
+
+				actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
+				prevKnownCost = pathFinderNodeFast.knownCost;
+				var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
+				DebugFlash(parentPosition, hDiscrepancy/150f, hDiscrepancy + " ( " + actualCost + " - " + pathFinderNodeFast.heuristicCost);
 				if (pathFinderNode.position == pathFinderNode.parentPosition) {
 					break;
 				}
