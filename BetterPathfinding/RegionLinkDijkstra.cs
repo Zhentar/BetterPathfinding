@@ -52,6 +52,8 @@ namespace BetterPathfinding
 
 		public static int nodes_popped;
 
+		private Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
+
 		public RegionLinkDijkstra(IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
 			this.costCalculator = cost;
@@ -139,19 +141,26 @@ namespace BetterPathfinding
 		//This could be cached across pathfinding calls, but I'd need extra detours to invalidate it and it apparently performs adequately without it.
 		public int RegionMinimumPathCost(Region region)
 		{
-			int minCost = 10000;
+			int minCost;
+			if (minPathCosts.TryGetValue(region, out minCost))
+			{
+				return minCost;
+			}
+			minCost = 10000;
 
 			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
 				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
 					int index = CellIndices.CellToIndex(x, z);
 					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
-					if (minCost == 0) 
+					if (minCost == 0)
 					{
+						minPathCosts[region] = 0;
 						return 0;
 					}
 				}
 			}
+			minPathCosts[region] = minCost;
 
 			return minCost;
 		}
