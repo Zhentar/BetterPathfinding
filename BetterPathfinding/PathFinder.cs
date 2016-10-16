@@ -194,7 +194,7 @@ namespace BetterPathfinding
 #if DEBUG
 			if (traverseParms.pawn != null)
 			{
-				Log.Message("Pathfinding times for pawn " + traverseParms.pawn.Name);
+				Log.Message("Pathfinding times for pawn " + traverseParms.pawn.Name + ", mode: " + traverseParms.mode.ToString());
 			}
 			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
@@ -212,18 +212,27 @@ namespace BetterPathfinding
 			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			temp.Dispose();
 			sw.Reset();
-
+#if PFPROFILE
+			sws.Clear();
+#endif
 			//re-run instead of timing the first run, to cut out jit overhead cost
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
-			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
             if (RegionPathCostHeuristic.DijkstraStopWatch != null)
             {
-                Log.Message("\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
-                Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
+                Log.Message("\t\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
+                Log.Message("\t\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
                 RegionPathCostHeuristic.DijkstraStopWatch = null;
             }
+
+#if PFPROFILE
+			foreach (var pfsw in sws)
+			{
+				Log.Message("\t SW " + pfsw.Key + ": " + pfsw.Value.ElapsedTicks + " ticks.");
+			}
+#endif
 			temp.Dispose();
 			disableDebugFlash = false;
 #endif
@@ -275,8 +284,9 @@ namespace BetterPathfinding
 			if (peMode == PathEndMode.Touch) {
 				destinationRect = destinationRect.ExpandedBy(1);
 			}
+			var regions = destinationRect.Cells.Where( c => c.InBounds()).Select(c => Find.RegionGrid.GetRegionAt_InvalidAllowed(c)).Where(c => c != null);
 			//Pretty sure this shouldn't be able to happen...
-			if (mode == HeuristicMode.Better && !canPassAnything && destinationRect.Cells.All(c => Find.RegionGrid.GetRegionAt_InvalidAllowed(c) == null))
+			if (mode == HeuristicMode.Better && !canPassAnything && !regions.Any())
 			{
 				mode = HeuristicMode.Vanilla;
 				Log.Warning("Pathfinding destination not in region, must fall back to vanilla!");
@@ -316,7 +326,7 @@ namespace BetterPathfinding
 				heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength / (float)moveTicksCardinal));
 			}
 
-			regionCost = new RegionPathCostHeuristic(start, destinationRect, traverseParms, moveTicksCardinal, moveTicksDiagonal);
+			regionCost = new RegionPathCostHeuristic(start, destinationRect, regions, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].heuristicCost = 0;
 			calcGrid[curIndex].parentX = (ushort)start.x;
@@ -332,13 +342,15 @@ namespace BetterPathfinding
 				flag3 = PawnUtility.ShouldCollideWithPawns(pawn);
 			}
 			while (true) {
-				PfProfilerBeginSample("Open cell");
+				PfProfilerBeginSample("Open cell pop");
 				if (openList.Count <= 0) {
 					break;
 				}
 				debug_totalOpenListCount += openList.Count;
 				debug_openCellsPopped++;
 				curIndex = openList.Pop().gridIndex;
+				PfProfilerEndSample();
+				PfProfilerBeginSample("Open cell");
 				if (calcGrid[curIndex].status == statusClosedValue) {
 					PfProfilerEndSample();
 				}
@@ -599,7 +611,7 @@ namespace BetterPathfinding
 				//actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
 				//prevKnownCost = pathFinderNodeFast.knownCost;
 				//var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
-				//DebugFlash(parentPosition, hDiscrepancy / 150f, hDiscrepancy + " (" + actualCost + "-" + pathFinderNodeFast.heuristicCost + ")");
+				//DebugFlash(parentPosition, hDiscrepancy / 100f, hDiscrepancy.ToString() /*+ " (" + actualCost + "-" + pathFinderNodeFast.heuristicCost + ")" */);
 				if (pathFinderNode.position == pathFinderNode.parentPosition) {
 					break;
 				}
@@ -620,14 +632,36 @@ namespace BetterPathfinding
 			statusClosedValue = 2;
 		}
 
+
+	#if PFPROFILE
+
+		private static Dictionary<string, Stopwatch> sws = new Dictionary<string, Stopwatch>();
+
+		private static Stack<Stopwatch> currSw = new Stack<Stopwatch>();
+
+	#endif
+
 		[Conditional("PFPROFILE")]
 		private static void PfProfilerBeginSample(string s)
 		{
+	#if PFPROFILE
+			if (sws == null ) { return; }
+			if (!sws.ContainsKey(s))
+			{
+				sws[s] = new Stopwatch();
+			}
+			var sw = sws[s];
+			currSw.Push(sw);
+			sw.Start();
+	#endif
 		}
 
 		[Conditional("PFPROFILE")]
 		private static void PfProfilerEndSample()
 		{
+#if PFPROFILE
+			currSw.Pop()?.Stop();
+#endif
 		}
 
 		private static void DebugDrawRichData()

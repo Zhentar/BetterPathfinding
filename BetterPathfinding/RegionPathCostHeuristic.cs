@@ -29,14 +29,14 @@ namespace BetterPathfinding
 
         public static Stopwatch DijkstraStopWatch;
 
-		public RegionPathCostHeuristic(IntVec3 start, CellRect end, TraverseParms parms, int cardinal, int diagonal)
+		public RegionPathCostHeuristic(IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
 		{
 			startCell = start;
 			targetCell = end.CenterCell;
 			moveTicksCardinal = cardinal;
 			moveTicksDiagonal = diagonal;
 			regionGrid = Find.RegionGrid;
-			rootRegions = new HashSet<Region>(end.Cells.Select(c => regionGrid.GetRegionAt_InvalidAllowed(c)).Where(r => r != null));
+			rootRegions = new HashSet<Region>(destRegions);
             traverseParms = parms;
 		}
 
@@ -69,12 +69,11 @@ namespace BetterPathfinding
 				DijkstraStopWatch.Start();
 #endif
 				minCost = distanceBuilder.GetRegionDistance(region, out minLink);
+				minPathCost = distanceBuilder.RegionMinimumPathCost(region);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
-
-                minPathCost = distanceBuilder.RegionMinimumPathCost(region);
-                lastRegionId = region.id;
+				lastRegionId = region.id;
 			}
 
 			if (minLink != null)
