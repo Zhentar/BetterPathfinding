@@ -25,6 +25,7 @@ namespace BetterPathfinding
 		private RegionLink minLink;
 		private int minCost = -1;
         private int minPathCost = 0;
+		private bool useMinLinkCenter;
         private TraverseParms traverseParms;
 
         public static Stopwatch DijkstraStopWatch;
@@ -68,8 +69,7 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch.Start();
 #endif
-				minCost = distanceBuilder.GetRegionDistance(region, out minLink);
-				minPathCost = distanceBuilder.RegionMinimumPathCost(region);
+				minCost = distanceBuilder.GetNextRegionOverDistance(region, out minLink, out minPathCost, out useMinLinkCenter);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
@@ -78,7 +78,15 @@ namespace BetterPathfinding
 
 			if (minLink != null)
 			{
-                var linkCost = RegionLinkDijkstra.RegionLinkDistance(cell, minLink, OctileDistance, minPathCost);
+                int linkCost;
+				if (useMinLinkCenter)
+				{
+					linkCost = RegionLinkDijkstra.RegionLinkCenterDistance(cell, minLink, OctileDistance, minPathCost);
+				}
+				else
+				{
+					linkCost = RegionLinkDijkstra.RegionLinkDistance(cell, minLink, OctileDistance, minPathCost);
+				}
 				return minCost + linkCost;
 			}
 

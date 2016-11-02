@@ -139,6 +139,8 @@ namespace BetterPathfinding
 
 		private static int debug_openCellsPopped;
 
+		private static int debug_closedCellsPopped;
+
 		private static readonly sbyte[] Directions = {
 			0,
 			1,
@@ -186,7 +188,7 @@ namespace BetterPathfinding
 			Better
 		}
 
-
+		
 		public static PawnPath _FindPath(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
 			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
@@ -226,6 +228,9 @@ namespace BetterPathfinding
                 Log.Message("\t\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
                 RegionPathCostHeuristic.DijkstraStopWatch = null;
             }
+
+			Log.Message("\t Closed cells popped: " + debug_closedCellsPopped);
+			Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
 
 #if PFPROFILE
 			foreach (var pfsw in sws)
@@ -312,6 +317,7 @@ namespace BetterPathfinding
 			debug_pathFailMessaged = false;
 			debug_totalOpenListCount = 0;
 			debug_openCellsPopped = 0;
+			debug_closedCellsPopped = 0;
 			if (pawn != null) {
 				moveTicksCardinal = pawn.TicksPerMoveCardinal;
 				moveTicksDiagonal = pawn.TicksPerMoveDiagonal;
@@ -346,13 +352,13 @@ namespace BetterPathfinding
 				if (openList.Count <= 0) {
 					break;
 				}
-				debug_totalOpenListCount += openList.Count;
 				debug_openCellsPopped++;
 				curIndex = openList.Pop().gridIndex;
 				PfProfilerEndSample();
 				PfProfilerBeginSample("Open cell");
 				if (calcGrid[curIndex].status == statusClosedValue) {
 					PfProfilerEndSample();
+					debug_closedCellsPopped++;
 				}
 				else {
 					curIntVec3 = CellIndices.IndexToCell(curIndex);
@@ -521,13 +527,15 @@ namespace BetterPathfinding
 								}
 								PfProfilerEndSample();
 							}
+							neighCost = Mathf.Max(neighCost, 1); //Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
 							neighCostThroughCur = neighCost + calcGrid[curIndex].knownCost;
 
 							if ((calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue) || calcGrid[neighIndex].knownCost > neighCostThroughCur)
 							{
+								PfProfilerBeginSample("Push Open");
 								calcGrid[neighIndex].parentX = curX;
 								calcGrid[neighIndex].parentZ = curZ;
-
+								
 								if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 								{
 									h = calcGrid[neighIndex].heuristicCost;
@@ -556,7 +564,7 @@ namespace BetterPathfinding
 											else
                                             {
                                                 h = regionCost.GetPathCostToRegion(neighIndex);
-												//DebugFlash(intVec, neighCostThroughCur + h / 1500f, (neighCostThroughCur + h).ToString());
+												//DebugFlash(intVec, h / 1500f, (h).ToString());
 											}
 											break;
 									}
@@ -568,6 +576,8 @@ namespace BetterPathfinding
 
 								//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
 								openList.Push(new CostNode(neighIndex, neighCostThroughCur + h));
+								debug_totalOpenListCount++;
+								PfProfilerEndSample();
 							}
 						}
 					}
@@ -599,8 +609,8 @@ namespace BetterPathfinding
 		{
 			newPath = PawnPathPool.GetEmptyPawnPath();
 			IntVec3 parentPosition = new IntVec3(curX, 0, curZ);
-			int prevKnownCost = calcGrid[CellIndices.CellToIndex(parentPosition)].knownCost;
-			int actualCost = 0;
+			//int prevKnownCost = calcGrid[CellIndices.CellToIndex(parentPosition)].knownCost;
+			//int actualCost = 0;
 			while (true) {
 				PathFinderNodeFast pathFinderNodeFast = calcGrid[CellIndices.CellToIndex(parentPosition)];
 				PathFinderNode pathFinderNode;

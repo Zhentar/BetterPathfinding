@@ -78,6 +78,29 @@ namespace BetterPathfinding
 			}
 		}
 
+		public int GetNextRegionOverDistance(Region region, out RegionLink minLink, out int minPathCost, out bool useCenter)
+		{
+			useCenter = false;
+			var firstResult = GetRegionDistance(region, out minLink);
+			minPathCost = RegionMinimumPathCost(region);
+			//In open terrain, returning the region link past the first helps smooth out discontinuities (reducing reopened nodes)
+			//In tighter areas, returning the next region link over hides the cost of obstructions, and
+			//shorter spans have smaller discontinuities so they cause fewer re-opens anyway
+			if (minLink.span.length < 9) 
+			{
+				return firstResult;
+			}
+			var secondRegion = GetLinkOtherRegion(region, minLink);
+			if (!regionMinLink.ContainsKey(secondRegion.id)) //it's the destination region
+			{
+				return firstResult;
+			}
+			minPathCost = Mathf.Min(minPathCost, RegionMinimumPathCost(secondRegion));
+			minLink = regionMinLink[secondRegion.id];
+			useCenter = true;
+			return distances[minLink];
+		}
+
 		public int GetRegionDistance(Region region, out RegionLink minLink)
 		{
 			if (regionMinLink.TryGetValue(region.id, out minLink))
@@ -185,7 +208,15 @@ namespace BetterPathfinding
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
 
-        public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
+		public static int RegionLinkCenterDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
+		{
+			int dx = Mathf.Abs(cell.x - SpanCenterX(link.span));
+			int dz = Mathf.Abs(cell.z - SpanCenterZ(link.span));
+
+			return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
+		}
+
+		public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
         {
             int dx, dz;
             if (link.span.dir == SpanDirection.North)
@@ -198,7 +229,7 @@ namespace BetterPathfinding
                 dz = Mathf.Abs(cell.z - link.span.root.z);
                 dx = GetValue(cell.x, link.span.root.x, link.span.length);
             }
-            return cost(dx, dz);
+            return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
         }
 
         private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
