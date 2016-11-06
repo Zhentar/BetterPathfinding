@@ -27,8 +27,6 @@ namespace BetterPathfinding
 		private RegionLinkPathCostInfo? secondBestLink;
         private TraverseParms traverseParms;
 
-        public static Stopwatch DijkstraStopWatch;
-
 		public RegionPathCostHeuristic(IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
 		{
 			startCell = start;
@@ -53,25 +51,18 @@ namespace BetterPathfinding
 				return OctileDistance(dx, dz);
 			}
 
-			if (distanceBuilder == null) {
-#if DEBUG
-				DijkstraStopWatch = Stopwatch.StartNew();
-#endif
+			if (distanceBuilder == null)
+			{
+				PathFinder.PfProfilerBeginSample("Distance Map Init");
 				distanceBuilder = new RegionLinkDijkstra(targetCell, rootRegions, startCell, traverseParms, OctileDistance);
-#if DEBUG
-				DijkstraStopWatch.Stop();
-#endif
+				PathFinder.PfProfilerEndSample();
 			}
 
 			if (region.id != lastRegionId) //Cache the most recently retrieved region, since fetches will tend to be clustered.
 			{
-#if DEBUG
-				DijkstraStopWatch.Start();
-#endif
+				PathFinder.PfProfilerBeginSample("Get Region Distance");
 				bestLink = distanceBuilder.GetNextRegionOverDistance(region, out secondBestLink);
-#if DEBUG
-				DijkstraStopWatch.Stop();
-#endif
+				PathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
 			}
 

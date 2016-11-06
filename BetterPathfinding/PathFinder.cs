@@ -141,6 +141,8 @@ namespace BetterPathfinding
 
 		private static int debug_closedCellsPopped;
 
+		private static int debug_closedCellsReopened;
+
 		private static readonly sbyte[] Directions = {
 			0,
 			1,
@@ -191,7 +193,17 @@ namespace BetterPathfinding
 		
 		public static PawnPath _FindPath(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
+#if PFPROFILE
+			sws.Clear();
+#endif
 			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+
+#if PFPROFILE
+			foreach (var pfsw in sws)
+			{
+				Log.Message("\t SW " + pfsw.Key + ": " + pfsw.Value.ElapsedTicks + " ticks.");
+			}
+#endif
 
 #if DEBUG
 			if (traverseParms.pawn != null)
@@ -214,30 +226,19 @@ namespace BetterPathfinding
 			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			temp.Dispose();
 			sw.Reset();
-#if PFPROFILE
-			sws.Clear();
-#endif
 			//re-run instead of timing the first run, to cut out jit overhead cost
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
 			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
-            if (RegionPathCostHeuristic.DijkstraStopWatch != null)
             {
-                Log.Message("\t\t Distance Map Time: " + RegionPathCostHeuristic.DijkstraStopWatch.ElapsedTicks + " ticks.");
-                Log.Message("\t\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
-                RegionPathCostHeuristic.DijkstraStopWatch = null;
+                Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
             }
 
 			Log.Message("\t Closed cells popped: " + debug_closedCellsPopped);
 			Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
+			Log.Message("\t Closed cells reopened: " + debug_closedCellsReopened);
 
-#if PFPROFILE
-			foreach (var pfsw in sws)
-			{
-				Log.Message("\t SW " + pfsw.Key + ": " + pfsw.Value.ElapsedTicks + " ticks.");
-			}
-#endif
 			temp.Dispose();
 			disableDebugFlash = false;
 #endif
@@ -391,15 +392,13 @@ namespace BetterPathfinding
 						}
 						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, calcGrid[curIndex].knownCost + " " + arrow);
 					}
-					if (destinationIsOneCell) {
-						if (curIndex == destinationIndex) {
-							PfProfilerEndSample();
-							return FinalizedPath();
-						}
-					}
-					else if (destinationRect.Contains(curIntVec3)) {
+					if ((destinationIsOneCell && curIndex == destinationIndex) || destinationRect.Contains(curIntVec3))
+					{
 						PfProfilerEndSample();
-						return FinalizedPath();
+						PfProfilerBeginSample("Finalize Path");
+						var ret = FinalizedPath();
+						PfProfilerEndSample();
+						return ret;
 					}
 					if (closedCellCount > 160000) {
 						Log.Warning(string.Concat(pawn, " pathing from ", start, " to ", dest, " hit search limit of ", 160000, " cells."));
@@ -422,7 +421,7 @@ namespace BetterPathfinding
 							bool notWalkable = false;
 							if (!pathGrid.WalkableFast(intVec)) {
 								if (!canPassAnything) {
-									DebugFlash(intVec, 0.22f, "walk");
+									//DebugFlash(intVec, 0.22f, "walk");
 									continue;
 								}
 								notWalkable = true;
@@ -532,13 +531,18 @@ namespace BetterPathfinding
 
 							if ((calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue) || calcGrid[neighIndex].knownCost > neighCostThroughCur)
 							{
-								PfProfilerBeginSample("Push Open");
+								PfProfilerBeginSample("Heuristic");
 								calcGrid[neighIndex].parentX = curX;
 								calcGrid[neighIndex].parentZ = curZ;
 								
 								if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 								{
 									h = calcGrid[neighIndex].heuristicCost;
+									if (calcGrid[neighIndex].status == statusClosedValue)
+									{
+										debug_closedCellsReopened++;
+										DebugFlash(intVec, 0, "");
+									}
 								}
 								else
 								{
@@ -574,6 +578,8 @@ namespace BetterPathfinding
 								calcGrid[neighIndex].status = statusOpenValue;
 								calcGrid[neighIndex].heuristicCost = h;
 
+								PfProfilerEndSample();
+								PfProfilerBeginSample("Push Open");
 								//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
 								openList.Push(new CostNode(neighIndex, neighCostThroughCur + h));
 								debug_totalOpenListCount++;
@@ -609,8 +615,8 @@ namespace BetterPathfinding
 		{
 			newPath = PawnPathPool.GetEmptyPawnPath();
 			IntVec3 parentPosition = new IntVec3(curX, 0, curZ);
-			//int prevKnownCost = calcGrid[CellIndices.CellToIndex(parentPosition)].knownCost;
-			//int actualCost = 0;
+			int prevKnownCost = calcGrid[CellIndices.CellToIndex(parentPosition)].knownCost;
+			int actualCost = 0;
 			while (true) {
 				PathFinderNodeFast pathFinderNodeFast = calcGrid[CellIndices.CellToIndex(parentPosition)];
 				PathFinderNode pathFinderNode;
@@ -618,10 +624,10 @@ namespace BetterPathfinding
 				pathFinderNode.position = parentPosition;
 				newPath.AddNode(pathFinderNode.position);
 
-				//actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
-				//prevKnownCost = pathFinderNodeFast.knownCost;
-				//var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
-				//DebugFlash(parentPosition, hDiscrepancy / 100f, hDiscrepancy.ToString() /*+ " (" + actualCost + "-" + pathFinderNodeFast.heuristicCost + ")" */);
+				actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
+				prevKnownCost = pathFinderNodeFast.knownCost;
+				var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
+				DebugFlash(parentPosition, hDiscrepancy / 100f, "\n\n" + hDiscrepancy /*+ " (" + actualCost + "-" + pathFinderNodeFast.heuristicCost + ")" */);
 				if (pathFinderNode.position == pathFinderNode.parentPosition) {
 					break;
 				}
@@ -652,7 +658,7 @@ namespace BetterPathfinding
 	#endif
 
 		[Conditional("PFPROFILE")]
-		private static void PfProfilerBeginSample(string s)
+		public static void PfProfilerBeginSample(string s)
 		{
 	#if PFPROFILE
 			if (sws == null ) { return; }
@@ -667,7 +673,7 @@ namespace BetterPathfinding
 		}
 
 		[Conditional("PFPROFILE")]
-		private static void PfProfilerEndSample()
+		public static void PfProfilerEndSample()
 		{
 #if PFPROFILE
 			currSw.Pop()?.Stop();
