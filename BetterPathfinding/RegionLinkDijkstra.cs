@@ -8,6 +8,15 @@ using Verse;
 
 namespace BetterPathfinding
 {
+
+	public struct RegionLinkPathCostInfo
+	{
+		public int cost;
+		public RegionLink minLink;
+		public int minTilePathCost;
+		public bool isDifferentRegionsLink;
+	}
+
 	public class RegionLinkDijkstra
 	{
 
@@ -78,27 +87,63 @@ namespace BetterPathfinding
 			}
 		}
 
-		public int GetNextRegionOverDistance(Region region, out RegionLink minLink, out int minPathCost, out bool useCenter)
+		public RegionLinkPathCostInfo GetNextRegionOverDistance(Region region, out RegionLinkPathCostInfo? secondBest)
 		{
-			useCenter = false;
-			var firstResult = GetRegionDistance(region, out minLink);
-			minPathCost = RegionMinimumPathCost(region);
+			secondBest = null;
+			RegionLinkPathCostInfo result = new RegionLinkPathCostInfo();
+			RegionLink minLink;
+			result.cost = GetRegionDistance(region, out minLink);
+			RegionLinkPathCostInfo(region, minLink, ref result);
+
+			RegionLink secondBestLink = null;
+			int secondBestCost = Int32.MaxValue;
+
+			foreach (var link in region.links)
+			{
+				if(link == minLink) { continue; }
+
+				if (distances.ContainsKey(link))
+				{
+					var cost = distances[link];
+					if (cost < secondBestCost)
+					{
+						secondBestCost = cost;
+						secondBestLink = link;
+					}
+				}
+			}
+
+			if (secondBestLink != null)
+			{
+				var secondResult = new RegionLinkPathCostInfo();
+				secondResult.cost = secondBestCost;
+				RegionLinkPathCostInfo(region, secondBestLink, ref secondResult);
+				secondBest = secondResult;
+			}
+
+			return result;
+		}
+
+		private void RegionLinkPathCostInfo(Region region, RegionLink minLink, ref RegionLinkPathCostInfo result)
+		{
+			result.minLink = minLink;
+			result.minTilePathCost = RegionMinimumPathCost(region);
 			//In open terrain, returning the region link past the first helps smooth out discontinuities (reducing reopened nodes)
 			//In tighter areas, returning the next region link over hides the cost of obstructions, and
 			//shorter spans have smaller discontinuities so they cause fewer re-opens anyway
-			if (minLink.span.length < 9) 
+			if (minLink.span.length < 9)
 			{
-				return firstResult;
+				return;
 			}
 			var secondRegion = GetLinkOtherRegion(region, minLink);
 			if (!regionMinLink.ContainsKey(secondRegion.id)) //it's the destination region
 			{
-				return firstResult;
+				return;
 			}
-			minPathCost = Mathf.Min(minPathCost, RegionMinimumPathCost(secondRegion));
-			minLink = regionMinLink[secondRegion.id];
-			useCenter = true;
-			return distances[minLink];
+			result.minTilePathCost = Mathf.Min(result.minTilePathCost, RegionMinimumPathCost(secondRegion));
+			result.minLink = regionMinLink[secondRegion.id];
+			result.isDifferentRegionsLink = true;
+			result.cost = distances[result.minLink];
 		}
 
 		public int GetRegionDistance(Region region, out RegionLink minLink)

@@ -10,6 +10,7 @@ namespace BetterPathfinding
 {
 	class RegionPathCostHeuristic
 	{
+	
 		private IntVec3 startCell;
 		private IntVec3 targetCell;
 		private readonly int moveTicksCardinal;
@@ -22,10 +23,8 @@ namespace BetterPathfinding
 		private RegionLinkDijkstra distanceBuilder;
 
 		private int lastRegionId = -1;
-		private RegionLink minLink;
-		private int minCost = -1;
-        private int minPathCost = 0;
-		private bool useMinLinkCenter;
+		private RegionLinkPathCostInfo bestLink;
+		private RegionLinkPathCostInfo? secondBestLink;
         private TraverseParms traverseParms;
 
         public static Stopwatch DijkstraStopWatch;
@@ -69,28 +68,40 @@ namespace BetterPathfinding
 #if DEBUG
 				DijkstraStopWatch.Start();
 #endif
-				minCost = distanceBuilder.GetNextRegionOverDistance(region, out minLink, out minPathCost, out useMinLinkCenter);
+				bestLink = distanceBuilder.GetNextRegionOverDistance(region, out secondBestLink);
 #if DEBUG
 				DijkstraStopWatch.Stop();
 #endif
 				lastRegionId = region.id;
 			}
 
-			if (minLink != null)
+			if (bestLink.minLink != null)
 			{
-                int linkCost;
-				if (useMinLinkCenter)
+				var cost = GetTotalCost(bestLink, cell);
+				if (!secondBestLink.HasValue)
 				{
-					linkCost = RegionLinkDijkstra.RegionLinkCenterDistance(cell, minLink, OctileDistance, minPathCost);
+					return cost;
 				}
-				else
-				{
-					linkCost = RegionLinkDijkstra.RegionLinkDistance(cell, minLink, OctileDistance, minPathCost);
-				}
-				return minCost + linkCost;
+				var secondCost = GetTotalCost(secondBestLink.Value, cell);
+				
+				return Mathf.Min(cost, secondCost);
 			}
 
 			return 1000000; //shouldn't happen except for sappers
+		}
+
+		private int GetTotalCost(RegionLinkPathCostInfo costInfo, IntVec3 cell)
+		{
+			int costToLink;
+			if (costInfo.isDifferentRegionsLink)
+			{
+				costToLink = RegionLinkDijkstra.RegionLinkCenterDistance(cell, costInfo.minLink, OctileDistance, costInfo.minTilePathCost);
+			}
+			else
+			{
+				costToLink = RegionLinkDijkstra.RegionLinkDistance(cell, costInfo.minLink, OctileDistance, costInfo.minTilePathCost);
+			}
+			return costInfo.cost + costToLink;
 		}
 		
 		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dz));
