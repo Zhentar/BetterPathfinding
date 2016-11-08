@@ -17,11 +17,17 @@ namespace BetterPathfinding
 
 			public int heuristicCost;
 
+			public ushort edgeCost;
+
 			public ushort parentX;
 
 			public ushort parentZ;
 
 			public ushort status;
+			
+#if DEBUG
+			public ushort timesPopped;
+#endif
 		}
 
 		private struct PathFinderNode
@@ -54,15 +60,18 @@ namespace BetterPathfinding
 
 		private struct CostNode
 		{
-			public CostNode(int index, int cost)
+			public CostNode(int index, int cost, int nodeh)
 			{
 				gridIndex = index;
 				totalCostEstimate = cost;
+				h = nodeh;
 			}
 
 			public int totalCostEstimate;
 
 			public int gridIndex;
+
+			public int h;
 		}
 
 		private static FastPriorityQueue<CostNode> openList;
@@ -143,6 +152,8 @@ namespace BetterPathfinding
 
 		private static int debug_closedCellsReopened;
 
+		private static int debug_needsIncreaseKey;
+
 		private static readonly sbyte[] Directions = {
 			0,
 			1,
@@ -193,22 +204,11 @@ namespace BetterPathfinding
 		
 		public static PawnPath _FindPath(IntVec3 start, TargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
-#if PFPROFILE
-			sws.Clear();
-#endif
-			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
-
-#if PFPROFILE
-			foreach (var pfsw in sws)
-			{
-				Log.Message("\t SW " + pfsw.Key + ": " + pfsw.Value.ElapsedTicks + " ticks.");
-			}
-#endif
-
 #if DEBUG
 			if (traverseParms.pawn != null)
 			{
 				Log.Message("Pathfinding times for pawn " + traverseParms.pawn.Name + ", mode: " + traverseParms.mode.ToString());
+				Log.Message("Move speed: " + traverseParms.pawn.TicksPerMoveCardinal + "," + traverseParms.pawn.TicksPerMoveDiagonal);
 			}
 			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
@@ -226,11 +226,12 @@ namespace BetterPathfinding
 			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			temp.Dispose();
 			sw.Reset();
-			//re-run instead of timing the first run, to cut out jit overhead cost
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
 			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
+			Log.Message("-- Needs increase-key: " + debug_needsIncreaseKey + " ( real pops: " +
+			            (debug_openCellsPopped - debug_needsIncreaseKey) + ")");
             {
                 Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
             }
@@ -241,6 +242,25 @@ namespace BetterPathfinding
 
 			temp.Dispose();
 			disableDebugFlash = false;
+#endif
+#if PFPROFILE
+			if (!hasRunOnce)
+			{
+				disableDebugFlash = true;
+				var jitRun = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+				jitRun.Dispose();
+				hasRunOnce = true;
+				disableDebugFlash = false;
+			}
+			sws.Clear();
+#endif
+			var result = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+
+#if PFPROFILE
+			foreach (var pfsw in sws)
+			{
+				Log.Message("\t SW " + pfsw.Key + ": " + pfsw.Value.ElapsedTicks + " ticks.");
+			}
 #endif
 
 			return result;
@@ -319,6 +339,7 @@ namespace BetterPathfinding
 			debug_totalOpenListCount = 0;
 			debug_openCellsPopped = 0;
 			debug_closedCellsPopped = 0;
+			debug_needsIncreaseKey = 0;
 			if (pawn != null) {
 				moveTicksCardinal = pawn.TicksPerMoveCardinal;
 				moveTicksDiagonal = pawn.TicksPerMoveDiagonal;
@@ -339,14 +360,14 @@ namespace BetterPathfinding
 			calcGrid[curIndex].parentX = (ushort)start.x;
 			calcGrid[curIndex].parentZ = (ushort)start.z;
 			calcGrid[curIndex].status = statusOpenValue;
-			openList.Push(new CostNode(curIndex, 0));
+			openList.Push(new CostNode(curIndex, 0, 0));
 			Area area = null;
 			if (pawn != null && pawn.playerSettings != null && !pawn.Drafted) {
 				area = pawn.playerSettings.AreaRestriction;
 			}
-			bool flag3 = false;
+			bool shouldCollideWithPawns = false;
 			if (pawn != null) {
-				flag3 = PawnUtility.ShouldCollideWithPawns(pawn);
+				shouldCollideWithPawns = PawnUtility.ShouldCollideWithPawns(pawn);
 			}
 			while (true) {
 				PfProfilerBeginSample("Open cell pop");
@@ -354,43 +375,48 @@ namespace BetterPathfinding
 					break;
 				}
 				debug_openCellsPopped++;
-				curIndex = openList.Pop().gridIndex;
+				var thisNode = openList.Pop();
+				curIndex = thisNode.gridIndex;
 				PfProfilerEndSample();
 				PfProfilerBeginSample("Open cell");
 				if (calcGrid[curIndex].status == statusClosedValue) {
 					PfProfilerEndSample();
 					debug_closedCellsPopped++;
 				}
-				else {
+				else if (thisNode.h < calcGrid[curIndex].heuristicCost)
+				{
+					PfProfilerEndSample();
+					debug_needsIncreaseKey++;
+				}
+				else
+				{
+#if DEBUG
+					calcGrid[curIndex].timesPopped++;
+#endif
 					curIntVec3 = CellIndices.IndexToCell(curIndex);
 					curX = (ushort)curIntVec3.x;
 					curZ = (ushort)curIntVec3.z;
 					if (DebugViewSettings.drawPaths && !disableDebugFlash)
 					{
 						//draw backpointer
-						char arrow;
-						int parX = calcGrid[curIndex].parentX;
-						int parZ = calcGrid[curIndex].parentZ;
-						if (parX < curX)
-						{
-							if (parZ < curZ) arrow = '↙';
-							else if (parZ > curZ) arrow = '↖';
-							else arrow = '←';
-						}
-						else if (parX > curX)
-						{
+						var arrow = GetBackPointerArrow(calcGrid[curIndex].parentX, calcGrid[curIndex].parentZ, curX, curZ);
+						string leading = "";
+						string trailing = "";
 
-							if (parZ < curZ) arrow = '↘';
-							else if (parZ > curZ) arrow = '↗';
-							else arrow = '→';
-						}
-						else
+#if DEBUG
+						switch (calcGrid[curIndex].timesPopped)
 						{
-							if (parZ < curZ) arrow = '↓';
-							else if (parZ > curZ) arrow = '↑';
-							else arrow = '⥁'; //unpossible
+							case 1:
+								trailing = "\n"; break;
+							case 2: break;
+							case 3:
+								leading = "\n"; break;
+							default:
+								leading = "\n\n"; break;
 						}
-						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, calcGrid[curIndex].knownCost + " " + arrow);
+#endif
+						//DebugFlash(curIntVec3, debug_openCellsPopped / 1500f, leading + debug_openCellsPopped + " " + arrow + trailing);
+						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, leading + calcGrid[curIndex].knownCost + " " + arrow + trailing);
 					}
 					if ((destinationIsOneCell && curIndex == destinationIndex) || destinationRect.Contains(curIntVec3))
 					{
@@ -408,19 +434,28 @@ namespace BetterPathfinding
 					}
 					PfProfilerEndSample();
 					PfProfilerBeginSample("Neighbor consideration");
-					for (int i = 0; i < 8; i++) {
-						neighX = (ushort)(curX + Directions[i]);
-						neighZ = (ushort)(curZ + Directions[i + 8]);
+					int[] neighIndexes = {-1, -1, -1, -1, -1, -1, -1, -1};
+					for (int i = 0; i < 8; i++)
+					{
+						neighX = (ushort) (curX + Directions[i]);
+						neighZ = (ushort) (curZ + Directions[i + 8]);
 						IntVec3 intVec = new IntVec3(neighX, 0, neighZ);
 						neighIndex = CellIndices.CellToIndex(neighX, neighZ);
-						if (neighX >= mapSizeX || neighZ >= mapSizeZ) {
+						if (neighX >= mapSizeX || neighZ >= mapSizeZ)
+						{
 							DebugFlash(intVec, 0.75f, "oob");
+							continue;
 						}
-						else if (calcGrid[neighIndex].status != statusClosedValue || (mode == HeuristicMode.Better && !canPassAnything)) {
+						//if (calcGrid[neighIndex].status != statusClosedValue || (mode == HeuristicMode.Better && !canPassAnything))
+						if ((calcGrid[neighIndex].status != statusClosedValue) && (calcGrid[neighIndex].status != statusOpenValue))
+						{
+							calcGrid[neighIndex].edgeCost = 10000;
 							int cost = 0;
 							bool notWalkable = false;
-							if (!pathGrid.WalkableFast(intVec)) {
-								if (!canPassAnything) {
+							if (!pathGrid.WalkableFast(intVec))
+							{
+								if (!canPassAnything)
+								{
 									//DebugFlash(intVec, 0.22f, "walk");
 									continue;
 								}
@@ -431,79 +466,87 @@ namespace BetterPathfinding
 								{
 									continue;
 								}
-								cost += (int)(edifice.HitPoints * 0.1f);
+								cost += (int) (edifice.HitPoints*0.1f);
 							}
-							if (i > 3) {
-								switch (i) {
+							if (i > 3)
+							{
+								switch (i)
+								{
 									case 4:
-										if (!pathGrid.WalkableFast(curX, curZ - 1)) {
-											continue;
-										}
-										if (!pathGrid.WalkableFast(curX + 1, curZ)) {
+										if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ))
+										{
 											continue;
 										}
 										break;
 									case 5:
-										if (!pathGrid.WalkableFast(curX, curZ + 1)) {
-											continue;
-										}
-										if (!pathGrid.WalkableFast(curX + 1, curZ)) {
+										if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ))
+										{
 											continue;
 										}
 										break;
 									case 6:
-										if (!pathGrid.WalkableFast(curX, curZ + 1)) {
-											continue;
-										}
-										if (!pathGrid.WalkableFast(curX - 1, curZ)) {
+										if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ))
+										{
 											continue;
 										}
 										break;
 									case 7:
-										if (!pathGrid.WalkableFast(curX, curZ - 1)) {
-											continue;
-										}
-										if (!pathGrid.WalkableFast(curX - 1, curZ)) {
+										if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ))
+										{
 											continue;
 										}
 										break;
 								}
 							}
-							neighCost = i > 3 ? moveTicksDiagonal : moveTicksCardinal;
+							neighCost = 0;
 							neighCost += cost;
-							if (!notWalkable) {
+							if (!notWalkable)
+							{
 								neighCost += pathGridDirect[neighIndex];
 							}
-							if (avoidGrid != null) {
-								neighCost += avoidGrid[neighIndex] * 8;
+							if (avoidGrid != null)
+							{
+								neighCost += avoidGrid[neighIndex]*8;
 							}
-							if (area != null && !area[intVec]) {
+							if (area != null && !area[intVec])
+							{
 								neighCost += 600;
 							}
-							if (flag3 && PawnUtility.AnyPawnBlockingPathAt(intVec, pawn)) {
+							if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(intVec, pawn))
+							{
 								neighCost += 800;
 							}
-							Building building = edificeGrid[CellIndices.CellToIndex(neighX, neighZ)];
-							if (building != null) {
+							Building building = edificeGrid[neighIndex];
+							if (building != null)
+							{
 								PfProfilerBeginSample("Edifices");
 								Building_Door building_Door = building as Building_Door;
-								if (building_Door != null) {
-									switch (traverseParms.mode) {
+								if (building_Door != null)
+								{
+									switch (traverseParms.mode)
+									{
 										case TraverseMode.ByPawn:
-											if (!traverseParms.canBash && building_Door.IsForbiddenToPass(pawn)) {
-												if (DebugViewSettings.drawPaths) {
+											if (!traverseParms.canBash && building_Door.IsForbiddenToPass(pawn))
+											{
+												if (DebugViewSettings.drawPaths)
+												{
 													DebugFlash(building.Position, 0.77f, "forbid");
 												}
 												PfProfilerEndSample();
 												continue;
 											}
-											if (!building_Door.FreePassage) {
-												if (building_Door.PawnCanOpen(pawn)) {
+											if (!building_Door.FreePassage)
+											{
+												if (building_Door.PawnCanOpen(pawn))
+												{
 													neighCost += building_Door.TicksToOpenNow;
 												}
-												else {
-													if (!traverseParms.canBash) {
-														if (DebugViewSettings.drawPaths) {
+												else
+												{
+													if (!traverseParms.canBash)
+													{
+														if (DebugViewSettings.drawPaths)
+														{
 															DebugFlash(building.Position, 0.34f, "cant pass");
 														}
 														PfProfilerEndSample();
@@ -514,78 +557,146 @@ namespace BetterPathfinding
 											}
 											break;
 										case TraverseMode.NoPassClosedDoors:
-											if (!building_Door.FreePassage) {
+											if (!building_Door.FreePassage)
+											{
 												PfProfilerEndSample();
 												continue;
 											}
 											break;
 									}
 								}
-								else if (pawn != null) {
+								else if (pawn != null)
+								{
 									neighCost += building.PathFindCostFor(pawn);
 								}
 								PfProfilerEndSample();
 							}
-							neighCost = Mathf.Max(neighCost, 1); //Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
-							neighCostThroughCur = neighCost + calcGrid[curIndex].knownCost;
-
-							if ((calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue) || calcGrid[neighIndex].knownCost > neighCostThroughCur)
+							//Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
+							calcGrid[neighIndex].edgeCost = (ushort)Mathf.Max(neighCost, 1);
+#if DEBUG
+							calcGrid[neighIndex].timesPopped = 0;
+#endif
+							PfProfilerBeginSample("Heuristic");
+							switch (mode)
 							{
-								PfProfilerBeginSample("Heuristic");
-								calcGrid[neighIndex].parentX = curX;
-								calcGrid[neighIndex].parentZ = curZ;
-								
-								if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
-								{
-									h = calcGrid[neighIndex].heuristicCost;
-									if (calcGrid[neighIndex].status == statusClosedValue)
+								case HeuristicMode.Vanilla:
+									h = heuristicStrength * (Mathf.Abs(neighX - destinationX) + Mathf.Abs(neighZ - destinationZ));
+									break;
+								case HeuristicMode.AdmissableOctile:
 									{
-										debug_closedCellsReopened++;
-										DebugFlash(intVec, 0, "");
+										var dx = Mathf.Abs(neighX - destinationX);
+										var dy = Mathf.Abs(neighZ - destinationZ);
+										h = moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dy);
 									}
-								}
-								else
-								{
-									switch (mode)
+									break;
+								case HeuristicMode.Better:
+									if (canPassAnything)
 									{
-										case HeuristicMode.Vanilla:
-											h = heuristicStrength*(Mathf.Abs(neighX - destinationX) + Mathf.Abs(neighZ - destinationZ));
-											break;
-										case HeuristicMode.AdmissableOctile:
-										{
-											var dx = Mathf.Abs(neighX - destinationX);
-											var dy = Mathf.Abs(neighZ - destinationZ);
-											h = moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy);
-										}
-											break;
-										case HeuristicMode.Better:
-											if (canPassAnything)
-											{
-												var dx = Mathf.Abs(neighX - destinationX);
-												var dy = Mathf.Abs(neighZ - destinationZ);
-												h = heuristicStrength * (moveTicksCardinal*(dx + dy) + (moveTicksDiagonal - 2*moveTicksCardinal)*Mathf.Min(dx, dy));
-											}
-											else
-                                            {
-                                                h = regionCost.GetPathCostToRegion(neighIndex);
-												//DebugFlash(intVec, h / 1500f, (h).ToString());
-											}
-											break;
+										var dx = Mathf.Abs(neighX - destinationX);
+										var dy = Mathf.Abs(neighZ - destinationZ);
+										h = heuristicStrength * (moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dy));
 									}
-								}
+									else
+									{
+										h = Mathf.CeilToInt(regionCost.GetPathCostToRegion(neighIndex) * 1.05f);
+										//var arrow = GetBackPointerArrow(curX, curZ, neighX, neighZ);
+										//var adjustedH = !regionCost.regionGrid[curIndex].Equals(regionCost.regionGrid[neighIndex]) ? (neighCostThroughCur + (h + calcGrid[curIndex].heuristicCost) / 2).ToString() : "";
+										////DebugFlash(intVec, neighCostThroughCur + h / 1500f, (neighCostThroughCur + h).ToString() + arrow + "\n" + adjustedH);
+										//DebugFlash(intVec, neighCostThroughCur / 1500f, "\n\n\n" + h + arrow);
+									}
+									break;
+							}
+							calcGrid[neighIndex].heuristicCost = h;
+							PfProfilerEndSample();
+						}
 
-								calcGrid[neighIndex].knownCost = neighCostThroughCur;
-								calcGrid[neighIndex].status = statusOpenValue;
-								calcGrid[neighIndex].heuristicCost = h;
+						if (calcGrid[neighIndex].edgeCost < 10000)
+						{
+							neighIndexes[i] = neighIndex;
+						}
+					}
+					PfProfilerBeginSample("BPMX Best H");
+					int bestH = calcGrid[curIndex].heuristicCost;
+					if (mode == HeuristicMode.Better)
+					{
+						for (int i = 0; i < 8; i++)
+						{
+							neighIndex = neighIndexes[i];
+							if (neighIndex < 0)
+							{
+								continue;
+							}
+							bestH = Math.Max(bestH, calcGrid[neighIndex].heuristicCost - (calcGrid[neighIndex].edgeCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal)));
+						}
+					}
+					//Pathmax Rule 3
+					calcGrid[curIndex].heuristicCost = bestH;
+					PfProfilerEndSample();
 
-								PfProfilerEndSample();
-								PfProfilerBeginSample("Push Open");
-								//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
-								openList.Push(new CostNode(neighIndex, neighCostThroughCur + h));
-								debug_totalOpenListCount++;
-								PfProfilerEndSample();
+					for (int i = 0; i < 8; i++)
+					{
+						neighIndex = neighIndexes[i];
+						if (neighIndex < 0)
+						{
+							continue;
+						}
+						if (calcGrid[neighIndex].status == statusClosedValue && (canPassAnything || mode != HeuristicMode.Better))
+						{
+							continue;
+						}
+
+
+						var thisDirEdgeCost = calcGrid[neighIndex].edgeCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
+						neighCostThroughCur = thisDirEdgeCost + calcGrid[curIndex].knownCost;
+						//Pathmax Rule 1
+						int nodeH = mode == HeuristicMode.Better ? Mathf.Max(calcGrid[neighIndex].heuristicCost, bestH - thisDirEdgeCost) : calcGrid[neighIndex].heuristicCost;
+						if (calcGrid[neighIndex].status != statusClosedValue && calcGrid[neighIndex].status != statusOpenValue)
+							//unvisited
+						{
+						}
+						else
+						{
+							bool needsUpdate = false;
+							if (calcGrid[neighIndex].status == statusOpenValue)
+							{
+								needsUpdate = nodeH > calcGrid[neighIndex].heuristicCost;
+							}
+							calcGrid[neighIndex].heuristicCost = nodeH;
+							
+							//(calcGrid[neighIndex].knownCost > neighCostThroughCur + (moveTicksDiagonal - moveTicksCardinal) /*don't reopen/requeue nodes for trivial differences */
+							needsUpdate = needsUpdate || (neighCostThroughCur < calcGrid[neighIndex].knownCost);
+
+							if (!needsUpdate)
+							{
+								continue;
 							}
 						}
+						if (calcGrid[neighIndex].status == statusClosedValue)
+						{
+							debug_closedCellsReopened++;
+							//DebugFlash(intVec, 0, "");
+						}
+
+						calcGrid[neighIndex].parentX = curX;
+						calcGrid[neighIndex].parentZ = curZ;
+
+						calcGrid[neighIndex].knownCost = neighCostThroughCur;
+						calcGrid[neighIndex].status = statusOpenValue;
+						calcGrid[neighIndex].heuristicCost = nodeH;
+
+						//accomplished NOTHING :'(
+						//if (mode == HeuristicMode.Better &&
+						//    (calcGrid[curIndex].parentX - curX != Directions[i] ||
+						//     calcGrid[curIndex].parentZ - curZ != Directions[i + 8]))
+						//{
+						//	h = h + moveTicksDiagonal;
+						//}
+
+						PfProfilerBeginSample("Push Open");
+						//(Vanilla Fix) Always need to re-add, otherwise it won't get resorted into the right place
+						openList.Push(new CostNode(neighIndex, neighCostThroughCur + nodeH, nodeH));
+						debug_totalOpenListCount++;
+						PfProfilerEndSample();
 					}
 					PfProfilerEndSample();
 					closedCellCount++;
@@ -601,6 +712,30 @@ namespace BetterPathfinding
 			DebugDrawRichData();
 			PfProfilerEndSample();
 			return PawnPath.NotFound;
+		}
+
+		private static char GetBackPointerArrow(int prevX, int prevZ, int curX, int curZ)
+		{
+			char arrow;
+			if (prevX < curX)
+			{
+				if (prevZ < curZ) arrow = '↙';
+				else if (prevZ > curZ) arrow = '↖';
+				else arrow = '←';
+			}
+			else if (prevX > curX)
+			{
+				if (prevZ < curZ) arrow = '↘';
+				else if (prevZ > curZ) arrow = '↗';
+				else arrow = '→';
+			}
+			else
+			{
+				if (prevZ < curZ) arrow = '↓';
+				else if (prevZ > curZ) arrow = '↑';
+				else arrow = '⥁'; //unpossible
+			}
+			return arrow;
 		}
 
 
@@ -654,6 +789,8 @@ namespace BetterPathfinding
 		private static Dictionary<string, Stopwatch> sws = new Dictionary<string, Stopwatch>();
 
 		private static Stack<Stopwatch> currSw = new Stack<Stopwatch>();
+
+		private static bool hasRunOnce;
 
 	#endif
 

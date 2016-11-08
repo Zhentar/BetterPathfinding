@@ -253,10 +253,18 @@ namespace BetterPathfinding
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
 
+
+		private static int SpanEndX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length : 0);
+
+		private static int SpanEndZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length : 0);
+
 		public static int RegionLinkCenterDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
 		{
 			int dx = Mathf.Abs(cell.x - SpanCenterX(link.span));
 			int dz = Mathf.Abs(cell.z - SpanCenterZ(link.span));
+
+			//int dx = Math.Max(Mathf.Abs(cell.x - SpanEndX(link.span)), Mathf.Abs(cell.x - link.span.root.x));
+			//int dz = Math.Max(Mathf.Abs(cell.z - SpanEndZ(link.span)), Mathf.Abs(cell.z - link.span.root.z));
 
 			return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
 		}

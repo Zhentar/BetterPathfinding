@@ -18,6 +18,15 @@ namespace BetterPathfinding
 		static DetourInjector()
 		{
 			LongEventHandler.QueueLongEvent(Inject, "Initializing", true, null);
+
+			#if DEBUG
+
+			if (Prefs.DevMode)
+			{
+				DebugViewSettings.drawPaths = true;
+			}
+
+			#endif
 		}
 
 		private static void Inject()
@@ -43,6 +52,20 @@ namespace BetterPathfinding
 			if (!Detours.TryDetourFromTo(RimWorld_PathFinder_Reinit, ModTest_PathFinder_Reinit))
 				return false;
 
+			var assembly = typeof(GameInitData).Assembly;
+			var debugCellType = assembly.GetType("Verse.DebugCell");
+			if (!DoDetour(debugCellType, typeof(DebugCell), "OnGUI")) return false;
+
+			return true;
+		}
+
+
+		private static bool DoDetour(Type rimworld, Type mod, string method)
+		{
+			MethodInfo RimWorld_A = rimworld.GetMethod(method, UniversalBindingFlags);
+			MethodInfo ModTest_A = mod.GetMethod(method, UniversalBindingFlags);
+			if (!Detours.TryDetourFromTo(RimWorld_A, ModTest_A))
+				return false;
 			return true;
 		}
 

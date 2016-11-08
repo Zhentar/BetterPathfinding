@@ -27,7 +27,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;PFPROFILE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -49,14 +49,19 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DebugDraw.cs" />
     <Compile Include="DetourInjector.cs" />
     <Compile Include="Detours.cs" />
+    <Compile Include="FastPriorityQueue.cs" />
     <Compile Include="PathFinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegionLinkDijkstra.cs" />
     <Compile Include="RegionPathCostHeuristic.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>xcopy /y /d  "$(TargetPath)" "G:\SteamLibrary\steamapps\common\RimWorld\Mods\Better Pathfinding\Assemblies"</PostBuildEvent>
+  </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

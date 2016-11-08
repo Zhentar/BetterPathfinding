@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using UnityEngine;
 using Verse;
@@ -16,7 +17,7 @@ namespace BetterPathfinding
 		private readonly int moveTicksCardinal;
 		private readonly int moveTicksDiagonal;
 
-		private readonly RegionGrid regionGrid;
+		public readonly Region[] regionGrid;
 
 		private readonly IEnumerable<Region> rootRegions;
 
@@ -27,22 +28,34 @@ namespace BetterPathfinding
 		private RegionLinkPathCostInfo? secondBestLink;
         private TraverseParms traverseParms;
 
+		private static Func<RegionGrid, Region[]> regionGridGetter;
+
 		public RegionPathCostHeuristic(IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
 		{
 			startCell = start;
 			targetCell = end.CenterCell;
 			moveTicksCardinal = cardinal;
 			moveTicksDiagonal = diagonal;
-			regionGrid = Find.RegionGrid;
+
+			var gridFunc = regionGridGetter ?? (regionGridGetter = GetFieldAccessor<RegionGrid, Region[]>("regionGrid"));
+			regionGrid = regionGridGetter(Find.RegionGrid);
 			rootRegions = new HashSet<Region>(destRegions);
             traverseParms = parms;
 		}
 
+		public static Func<TObject, TValue> GetFieldAccessor<TObject, TValue>(string fieldName)
+		{
+			ParameterExpression param = Expression.Parameter(typeof(TObject), "arg");
+			MemberExpression member = Expression.Field(param, fieldName);
+			LambdaExpression lambda = Expression.Lambda(typeof(Func<TObject, TValue>), member, param);
+			Func<TObject, TValue> compiled = (Func<TObject, TValue>)lambda.Compile();
+			return compiled;
+		}
+
 		public int GetPathCostToRegion(int cellIndex)
 		{
+			var region = regionGrid[cellIndex];
 			var cell = CellIndices.IndexToCell(cellIndex);
-
-			var region = regionGrid.GetValidRegionAt_NoRebuild(cell);
 
 			if (rootRegions.Contains(region))
 			{
