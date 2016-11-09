@@ -160,9 +160,9 @@ namespace BetterPathfinding
 				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
                 {
                     var destRegion = GetLinkOtherRegion(vertex.FromRegion, vertex.Link);
-
+					
 					//I've never encountered this during testing, but users reported issues resolved by this check.
-	                if (destRegion?.valid != true) { continue; }
+					if (destRegion?.valid != true) { continue; }
 
                     //TODO: lying about destination to avoid danger check... should it work this way?
                     if (destRegion.portal != null && !destRegion.Allows(traverseParms, true))
@@ -175,6 +175,7 @@ namespace BetterPathfinding
 					{
 						if (current2 == vertex.Link) { continue; }
 						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
+						addedCost = Math.Max(addedCost, 1); //Handle mods with negative path costs
 						int newCost = knownBest + addedCost;
                         int pathCost = RegionLinkDistance(targetCell, current2, costCalculator, 0) + newCost;
 						int oldCost;
