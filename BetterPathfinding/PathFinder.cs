@@ -272,6 +272,7 @@ namespace BetterPathfinding
 				else if (!start.CanReach(dest, peMode, traverseParms)) {
 					return PawnPath.NotFound;
 				}
+				RegionAndRoomUpdater.RebuildDirtyRegionsAndRooms();
 			}
 
 
