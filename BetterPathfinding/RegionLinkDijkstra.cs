@@ -165,9 +165,30 @@ namespace BetterPathfinding
 					if (destRegion?.valid != true) { continue; }
 
                     //TODO: lying about destination to avoid danger check... should it work this way?
-                    if (destRegion.portal != null && !destRegion.Allows(traverseParms, true))
+                    if (destRegion.portal != null)
                     {
-                        continue;
+						//Not using Region.Allows because it is not entirely consistent with the pathfinder logic
+						//Resulting in errors when a door is within range of 22 turrets
+						switch (traverseParms.mode)
+						{
+							case TraverseMode.ByPawn:
+								if (!traverseParms.canBash && destRegion.portal.IsForbiddenToPass(traverseParms.pawn))
+								{
+									continue;
+								}
+								if (!destRegion.portal.FreePassage && !destRegion.portal.PawnCanOpen(traverseParms.pawn) &&
+								    !traverseParms.canBash)
+								{
+									continue;
+								}
+								break;
+							case TraverseMode.NoPassClosedDoors:
+								if (!destRegion.portal.FreePassage)
+								{
+									continue;
+								}
+								break;
+						}
                     }
 
 					var minPathCost = RegionMinimumPathCost(destRegion);
