@@ -15,20 +15,29 @@ namespace BetterPathfinding
 
 		private static readonly Func<PathFinder, Map> mapGet = Utils.GetFieldAccessor<PathFinder, Map>("map");
 
-		private static readonly Dictionary<PathFinder, NewPathFinder> pfMap = new Dictionary<PathFinder, NewPathFinder>();
-
 		public static PawnPath FindPath(this PathFinder @this, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
-			if (!pfMap.ContainsKey(@this))
-			{
-				pfMap.Add(@this, new NewPathFinder(mapGet(@this)));
-			}
+			var map = mapGet(@this);
+			var pfcomp = map.GetComponent<PathFinderMapComponent>();
 
-			return pfMap[@this].FindPath(start, dest, traverseParms, peMode);
+			if (pfcomp == null)
+			{
+				pfcomp = new PathFinderMapComponent(map);
+				map.components.Add(pfcomp);
+			}
+			return pfcomp.PathFinder.FindPath(start, dest, traverseParms, peMode);
 		}
 	}
 
+	class PathFinderMapComponent : MapComponent
+	{
+		public readonly NewPathFinder PathFinder;
 
+		public PathFinderMapComponent(Map map) : base(map)
+		{
+			PathFinder = new NewPathFinder(map);
+		}
+	}
 
 	class NewPathFinder
 	{
