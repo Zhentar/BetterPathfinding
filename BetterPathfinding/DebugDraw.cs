@@ -22,23 +22,21 @@ namespace BetterPathfinding
 
 		static DebugCell()
 		{
-
-			var assembly = typeof(GameInitData).Assembly;
-			var debugCellType = assembly.GetType("Verse.DebugCell");
+			var debugCellType = typeof(GameInitData).Assembly.GetType("Verse.DebugCell");
 			cGetter = GetFieldAccessor<IntVec3>(debugCellType, "c");
 			displayStringGetter = GetFieldAccessor<string>(debugCellType, "displayString");
 		}
 
-		private static Func<object, IntVec3> cGetter;
+		private static readonly Func<object, IntVec3> cGetter;
 
-		private static Func<object, string> displayStringGetter;
+		private static readonly Func<object, string> displayStringGetter;
 
 		public void OnGUI()
 		{
 			var displayString = displayStringGetter(this);
 			if (displayString != null)
 			{
-				Vector2 vector = cGetter(this).ToScreenPosition();
+				Vector2 vector = cGetter(this).ToUIPosition();
 				if (vector.x > 0 && vector.y > 0 && vector.x < Screen.width && vector.y < Screen.height)
 				{
 					Rect rect = new Rect(vector.x - 35, vector.y - 35, 70f, 70f);

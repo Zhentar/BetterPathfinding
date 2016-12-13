@@ -59,12 +59,15 @@ namespace BetterPathfinding
 
 		private ByteGrid avoidGrid;
 
+		private Map map;
+
 		public static int nodes_popped;
 
 		private Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
-		public RegionLinkDijkstra(IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
+		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
+			this.map = map;
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
@@ -164,17 +167,40 @@ namespace BetterPathfinding
 					//I've never encountered this during testing, but users reported issues resolved by this check.
 	                if (destRegion?.valid != true) { continue; }
 
-                    //TODO: lying about destination to avoid danger check... should it work this way?
-                    if (destRegion.portal != null && !destRegion.Allows(traverseParms, true))
-                    {
-                        continue;
-                    }
+					if (destRegion.portal != null)
+					{
+						//Not using Region.Allows because it is not entirely consistent with the pathfinder logic
+						//Resulting in errors when a door is within range of 22 turrets
+						switch (traverseParms.mode)
+						{
+							case TraverseMode.ByPawn:
+								if (!traverseParms.canBash && destRegion.portal.IsForbiddenToPass(traverseParms.pawn))
+								{
+									continue;
+								}
+								if (!destRegion.portal.FreePassage && !destRegion.portal.PawnCanOpen(traverseParms.pawn) &&
+									!traverseParms.canBash)
+								{
+									continue;
+								}
+								break;
+							case TraverseMode.NoPassClosedDoors:
+								if (!destRegion.portal.FreePassage)
+								{
+									continue;
+								}
+								break;
+						}
+					}
+
+
 
 					var minPathCost = RegionMinimumPathCost(destRegion);
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
 						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
+						addedCost = Math.Max(addedCost, 1); //Handle mods with negative path costs
 						int newCost = knownBest + addedCost;
                         int pathCost = RegionLinkDistance(targetCell, current2, costCalculator, 0) + newCost;
 						int oldCost;
@@ -222,8 +248,8 @@ namespace BetterPathfinding
 			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
 				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
-					int index = CellIndices.CellToIndex(x, z);
-					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
+					int index = this.map.cellIndices.CellToIndex(x, z);
+					minCost = Mathf.Min(minCost, this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
 					if (minCost == 0)
 					{
 						minPathCosts[region] = 0;
@@ -262,9 +288,6 @@ namespace BetterPathfinding
 		{
 			int dx = Mathf.Abs(cell.x - SpanCenterX(link.span));
 			int dz = Mathf.Abs(cell.z - SpanCenterZ(link.span));
-
-			//int dx = Math.Max(Mathf.Abs(cell.x - SpanEndX(link.span)), Mathf.Abs(cell.x - link.span.root.x));
-			//int dz = Math.Max(Mathf.Abs(cell.z - SpanEndZ(link.span)), Mathf.Abs(cell.z - link.span.root.z));
 
 			return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
 		}

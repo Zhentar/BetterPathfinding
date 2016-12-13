@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 using Verse;
@@ -16,9 +17,8 @@ namespace BetterPathfinding
 		private IntVec3 targetCell;
 		private readonly int moveTicksCardinal;
 		private readonly int moveTicksDiagonal;
-
-		public readonly Region[] regionGrid;
-
+		private readonly Map map;
+		
 		private readonly IEnumerable<Region> rootRegions;
 
 		private RegionLinkDijkstra distanceBuilder;
@@ -28,34 +28,29 @@ namespace BetterPathfinding
 		private RegionLinkPathCostInfo? secondBestLink;
         private TraverseParms traverseParms;
 
-		private static Func<RegionGrid, Region[]> regionGridGetter;
+		private static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
 
-		public RegionPathCostHeuristic(IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
+		private static readonly FieldInfo regionGridInfo = typeof(RegionGrid).GetField("regionGrid", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetField);
+
+		private Region[] regionGrid { get { return regionGridGet(this.map.regionGrid); } set { regionGridInfo.SetValue(this, value); } }
+
+
+		public RegionPathCostHeuristic(Map map, IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
 		{
+			this.map = map;
 			startCell = start;
 			targetCell = end.CenterCell;
 			moveTicksCardinal = cardinal;
 			moveTicksDiagonal = diagonal;
 
-			var gridFunc = regionGridGetter ?? (regionGridGetter = GetFieldAccessor<RegionGrid, Region[]>("regionGrid"));
-			regionGrid = regionGridGetter(Find.RegionGrid);
 			rootRegions = new HashSet<Region>(destRegions);
             traverseParms = parms;
-		}
-
-		public static Func<TObject, TValue> GetFieldAccessor<TObject, TValue>(string fieldName)
-		{
-			ParameterExpression param = Expression.Parameter(typeof(TObject), "arg");
-			MemberExpression member = Expression.Field(param, fieldName);
-			LambdaExpression lambda = Expression.Lambda(typeof(Func<TObject, TValue>), member, param);
-			Func<TObject, TValue> compiled = (Func<TObject, TValue>)lambda.Compile();
-			return compiled;
 		}
 
 		public int GetPathCostToRegion(int cellIndex)
 		{
 			var region = regionGrid[cellIndex];
-			var cell = CellIndices.IndexToCell(cellIndex);
+			var cell = this.map.cellIndices.IndexToCell(cellIndex);
 
 			if (rootRegions.Contains(region))
 			{
@@ -66,16 +61,16 @@ namespace BetterPathfinding
 
 			if (distanceBuilder == null)
 			{
-				PathFinder.PfProfilerBeginSample("Distance Map Init");
-				distanceBuilder = new RegionLinkDijkstra(targetCell, rootRegions, startCell, traverseParms, OctileDistance);
-				PathFinder.PfProfilerEndSample();
+				NewPathFinder.PfProfilerBeginSample("Distance Map Init");
+				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, OctileDistance);
+				NewPathFinder.PfProfilerEndSample();
 			}
 
 			if (region.id != lastRegionId) //Cache the most recently retrieved region, since fetches will tend to be clustered.
 			{
-				PathFinder.PfProfilerBeginSample("Get Region Distance");
+				NewPathFinder.PfProfilerBeginSample("Get Region Distance");
 				bestLink = distanceBuilder.GetNextRegionOverDistance(region, out secondBestLink);
-				PathFinder.PfProfilerEndSample();
+				NewPathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
 			}
 
