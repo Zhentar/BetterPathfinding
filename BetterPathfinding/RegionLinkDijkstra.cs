@@ -59,6 +59,8 @@ namespace BetterPathfinding
 
 		private ByteGrid avoidGrid;
 
+		private Area area;
+
 		private Map map;
 
 		public static int nodes_popped;
@@ -72,6 +74,10 @@ namespace BetterPathfinding
             this.traverseParms = parms;
             this.targetCell = target;
 			avoidGrid = parms.pawn?.GetAvoidGrid();
+			if (parms.pawn?.Drafted == false)
+			{
+				area = parms.pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
+			}
 			nodes_popped = 0;
 			
 			foreach (var region in startingRegions)
@@ -248,8 +254,13 @@ namespace BetterPathfinding
 			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
 				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
-					int index = this.map.cellIndices.CellToIndex(x, z);
-					minCost = Mathf.Min(minCost, this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
+					var index = this.map.cellIndices.CellToIndex(x, z);
+					var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0);
+					if (area != null && !area[index])
+					{
+						cellCost += 600;
+					}
+					minCost = Mathf.Min(minCost, cellCost);
 					if (minCost == 0)
 					{
 						minPathCosts[region] = 0;
