@@ -257,8 +257,6 @@ namespace BetterPathfinding
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
 			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
-			Log.Message("-- Needs increase-key: " + debug_needsIncreaseKey + " ( real pops: " +
-			            (debug_openCellsPopped - debug_needsIncreaseKey) + ")");
             {
                 Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
             }
@@ -391,9 +389,10 @@ namespace BetterPathfinding
 			calcGrid[curIndex].status = statusOpenValue;
 			openList.Push(new CostNode(curIndex, 0));
 			Area area = null;
-			if (pawn != null && pawn.playerSettings != null && !pawn.Drafted) {
-				area = pawn.playerSettings.AreaRestrictionInPawnCurrentMap;
+			if (pawn?.Drafted == false) {
+				area = pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
 			}
+
 			bool shouldCollideWithPawns = false;
 			if (pawn != null) {
 				shouldCollideWithPawns = PawnUtility.ShouldCollideWithPawns(pawn);
@@ -527,7 +526,7 @@ namespace BetterPathfinding
 								neighCost += avoidGrid[neighIndex]*8;
 							}
 							IntVec3 intVec = new IntVec3(neighX, 0, neighZ);
-							if (area != null && !area[intVec])
+							if (area?[intVec] == true)
 							{
 								neighCost += 600;
 							}
@@ -675,17 +674,24 @@ namespace BetterPathfinding
 						if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 						{
 							bool needsUpdate = false;
+							int minReopenGain = 0;
 							if (calcGrid[neighIndex].status == statusOpenValue)
 							{
 								needsUpdate = nodeH > calcGrid[neighIndex].heuristicCost;
 							}
+							else
+							{	//Don't reopen closed nodes if the path isn't cheaper by at least the difference between one straight & diagonal movement
+								minReopenGain = moveTicksDiagonal - moveTicksCardinal;
+							}
 							calcGrid[neighIndex].heuristicCost = nodeH;
 
-							//don't reopen/requeue nodes for trivial differences
-							needsUpdate = needsUpdate || ((neighCostThroughCur + (moveTicksDiagonal - moveTicksCardinal)) < calcGrid[neighIndex].knownCost);
-
-							if (!needsUpdate)
+							
+							if (!(neighCostThroughCur + minReopenGain < calcGrid[neighIndex].knownCost))
 							{
+								if (needsUpdate) //if the heuristic cost was increased for an open node, we need to adjust it's spot in the queue
+								{
+									openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[neighIndex].knownCost + nodeH));
+								}
 								continue;
 							}
 						}
@@ -699,7 +705,7 @@ namespace BetterPathfinding
 
 						calcGrid[neighIndex].parentX = curX;
 						calcGrid[neighIndex].parentZ = curZ;
-
+						
 						calcGrid[neighIndex].knownCost = neighCostThroughCur;
 						calcGrid[neighIndex].status = statusOpenValue;
 						calcGrid[neighIndex].heuristicCost = nodeH;
