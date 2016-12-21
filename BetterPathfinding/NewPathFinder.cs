@@ -178,24 +178,14 @@ namespace BetterPathfinding
 
 		private int[] neighIndexes = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
-		private static readonly sbyte[] Directions = {
-			0,
-			1,
-			0,
-			-1,
-			1,
-			1,
-			-1,
-			-1,
-			-1,
-			0,
-			1,
-			0,
-			-1,
-			1,
-			1,
-			-1
+		private SimpleCurve regionHeuristicWeight = new SimpleCurve
+		{	//x values get adjusted 
+			new CurvePoint(1, 1.25f),
+			new CurvePoint(2, 1.12f),
+			new CurvePoint(4, 1.05f)
 		};
+
+		private static readonly sbyte[] Directions = { 0, 1, 0, -1, 1, 1, -1, -1, -1, 0, 1, 0, -1, 1, 1, -1 };
 
 		private static readonly SimpleCurve HeuristicStrengthHuman_DistanceCurve = new SimpleCurve
 		{
@@ -311,7 +301,6 @@ namespace BetterPathfinding
 				Log.Error(string.Concat("Tried to FindPath with invalid dest ", dest, ", pawn= ", pawn));
 				return PawnPath.NotFound;
 			}
-			RegionPathCostHeuristic regionCost = null;
 
 			if (!canPassAnything) {
 				if (!this.map.reachability.CanReach(start, dest, peMode, traverseParms))
@@ -373,12 +362,22 @@ namespace BetterPathfinding
 			moveTicksCardinal = pawn?.TicksPerMoveCardinal ?? 13;
 			moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 18;
 
-			if (mode == HeuristicMode.Better)
-			{   //Roughly preserves the Vanilla behavior of increasing path accuracy for shorter paths and slower pawns, though not as smoothly. Only applies to sappers.
-				heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength / (float)moveTicksCardinal));
-			}
+			RegionPathCostHeuristic regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 
-			regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, moveTicksCardinal, moveTicksDiagonal);
+			if (mode == HeuristicMode.Better)
+			{
+				if (canPassAnything)
+				{
+					//Roughly preserves the Vanilla behavior of increasing path accuracy for shorter paths and slower pawns, though not as smoothly. Only applies to sappers.
+					heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength/(float) moveTicksCardinal));
+				}
+				else
+				{	//Capped to 20,000 because otherwise long paths outside of allowed areas get ridiculous weightings
+					var totalCostEst = Math.Min(regionCost.GetPathCostToRegion(curIndex), 20000);
+					regionHeuristicWeight[1].x = totalCostEst / 2;
+					regionHeuristicWeight[2].x = totalCostEst;
+				}
+			}
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].heuristicCost = 0;
 			calcGrid[curIndex].parentX = (ushort)start.x;
@@ -612,7 +611,7 @@ namespace BetterPathfinding
 									}
 									else
 									{
-										h = Mathf.CeilToInt(regionCost.GetPathCostToRegion(neighIndex) /** 1.05f*/);
+										h = regionCost.GetPathCostToRegion(neighIndex);
 									}
 									break;
 							}
@@ -678,9 +677,9 @@ namespace BetterPathfinding
 							
 							if (!(neighCostThroughCur + minReopenGain < calcGrid[neighIndex].knownCost))
 							{
-								if (needsUpdate) //if the heuristic cost was increased for an open node, we need to adjust it's spot in the queue
+								if (needsUpdate) //if the heuristic cost was increased for an open node, we need to adjust its spot in the queue
 								{
-									openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[neighIndex].knownCost + nodeH));
+									openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[neighIndex].knownCost + Mathf.CeilToInt(nodeH * regionHeuristicWeight.Evaluate(nodeH))));
 								}
 								continue;
 							}
@@ -701,7 +700,7 @@ namespace BetterPathfinding
 						calcGrid[neighIndex].heuristicCost = nodeH;
 						
 						PfProfilerBeginSample("Push Open");
-						openList.PushOrUpdate(new CostNode(neighIndex, neighCostThroughCur + nodeH));
+						openList.PushOrUpdate(new CostNode(neighIndex, neighCostThroughCur + Mathf.CeilToInt(nodeH * regionHeuristicWeight.Evaluate(nodeH))));
 						debug_totalOpenListCount++;
 						PfProfilerEndSample();
 					}
