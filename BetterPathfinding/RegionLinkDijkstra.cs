@@ -8,24 +8,15 @@ using Verse;
 
 namespace BetterPathfinding
 {
-
-	public struct RegionLinkPathCostInfo
-	{
-		public int cost;
-		public RegionLink minLink;
-		public int minTilePathCost;
-		public bool isDifferentRegionsLink;
-	}
-
 	public class RegionLinkDijkstra
 	{
 
 		private struct RegionLinkQueueEntry
 		{
-			public Region FromRegion;
-			public RegionLink Link;
-			public int Cost;
-            public int EstimatedPathCost;
+			public readonly Region FromRegion;
+			public readonly RegionLink Link;
+			public readonly int Cost;
+            public readonly int EstimatedPathCost;
 
 			public RegionLinkQueueEntry(Region from, RegionLink l, int c, int tc)
 			{
@@ -51,21 +42,21 @@ namespace BetterPathfinding
 
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
 
-		private Func<int, int, int> costCalculator;
+		private readonly Func<int, int, int> costCalculator;
 
         private TraverseParms traverseParms;
 
-        private IntVec3 targetCell;
+        private readonly IntVec3 targetCell;
 
-		private ByteGrid avoidGrid;
+		private readonly ByteGrid avoidGrid;
 
-		private Area area;
+		private readonly Area area;
 
-		private Map map;
+		private readonly Map map;
 
 		public static int nodes_popped;
 
-		private Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
+		private readonly Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
 		//private NewPathFinder debugPathfinder;
 		public IntVec3 rootCell;
@@ -103,65 +94,6 @@ namespace BetterPathfinding
 					queue.Push(new RegionLinkQueueEntry(region, current, dist, dist));
 				}
 			}
-		}
-
-		public RegionLinkPathCostInfo GetNextRegionOverDistance(Region region, out RegionLinkPathCostInfo? secondBest)
-		{
-			secondBest = null;
-			RegionLinkPathCostInfo result = new RegionLinkPathCostInfo();
-			RegionLink minLink;
-			result.cost = GetRegionDistance(region, out minLink);
-			RegionLinkPathCostInfo(region, minLink, ref result);
-
-			RegionLink secondBestLink = null;
-			int secondBestCost = Int32.MaxValue;
-
-			foreach (var link in region.links)
-			{
-				if(link == minLink) { continue; }
-
-				if (distances.ContainsKey(link))
-				{
-					var cost = distances[link];
-					if (cost < secondBestCost)
-					{
-						secondBestCost = cost;
-						secondBestLink = link;
-					}
-				}
-			}
-
-			if (secondBestLink != null)
-			{
-				var secondResult = new RegionLinkPathCostInfo();
-				secondResult.cost = secondBestCost;
-				RegionLinkPathCostInfo(region, secondBestLink, ref secondResult);
-				secondBest = secondResult;
-			}
-
-			return result;
-		}
-
-		private void RegionLinkPathCostInfo(Region region, RegionLink minLink, ref RegionLinkPathCostInfo result)
-		{
-			result.minLink = minLink;
-			result.minTilePathCost = RegionMinimumPathCost(region);
-			//In open terrain, returning the region link past the first helps smooth out discontinuities (reducing reopened nodes)
-			//In tighter areas, returning the next region link over hides the cost of obstructions, and
-			//shorter spans have smaller discontinuities so they cause fewer re-opens anyway
-			if (minLink.span.length < 9)
-			{
-				return;
-			}
-			var secondRegion = GetLinkOtherRegion(region, minLink);
-			if (!regionMinLink.ContainsKey(secondRegion.id)) //it's the destination region
-			{
-				return;
-			}
-			result.minTilePathCost = Mathf.Min(result.minTilePathCost, RegionMinimumPathCost(secondRegion));
-			result.minLink = regionMinLink[secondRegion.id];
-			result.isDifferentRegionsLink = true;
-			result.cost = distances[result.minLink];
 		}
 
 		public int GetRegionDistance(Region region, out RegionLink minLink)
