@@ -26,7 +26,7 @@ namespace BetterPathfinding
 		private int lastRegionId = -1;
 		private RegionLink bestLink;
 		private int bestLinkCost;
-		private int lastRegionPathCost;
+		private int lastRegionTilePathCost;
         private readonly TraverseParms traverseParms;
 
 		private static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
@@ -71,15 +71,15 @@ namespace BetterPathfinding
 			{
 				NewPathFinder.PfProfilerBeginSample("Get Region Distance"); 
 				bestLinkCost = distanceBuilder.GetRegionDistance(region, out bestLink);
-				lastRegionPathCost = distanceBuilder.RegionMinimumPathCost(region);
+				lastRegionTilePathCost = distanceBuilder.RegionMinimumPathCost(region);
 				NewPathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
 			}
 
 			if (bestLink != null)
 			{
-				var costToLink = RegionLinkDijkstra.RegionLinkDistance(cell, bestLink, OctileDistance, lastRegionPathCost);
-				return lastRegionPathCost + costToLink;
+				var costToLink = RegionLinkDijkstra.RegionLinkDistance(cell, bestLink, OctileDistance, lastRegionTilePathCost);
+				return bestLinkCost + costToLink;
 			}
 
 			return 1000000; //shouldn't happen except for sappers
