@@ -67,19 +67,28 @@ namespace BetterPathfinding
 
 		private Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
+		//private NewPathFinder debugPathfinder;
+		public IntVec3 rootCell;
+
 		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
 			this.map = map;
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
+			this.rootCell = rootCell;
 			avoidGrid = parms.pawn?.GetAvoidGrid();
 			if (parms.pawn?.Drafted == false)
 			{
 				area = parms.pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
 			}
 			nodes_popped = 0;
-			
+
+			//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+			//{
+			//	debugPathfinder = new NewPathFinder(map);
+			//}
+
 			foreach (var region in startingRegions)
 			{
 				var minPathCost = RegionMinimumPathCost(region);
@@ -226,6 +235,18 @@ namespace BetterPathfinding
 					}
 					//if this is the first vertex popped for the region, we've found the shortest path to that region
 					if (!regionMinLink.ContainsKey(destRegion.id)) {
+						//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+						//{
+						//	NewPathFinder.disableDebugFlash = true;
+						//	var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
+						//	NewPathFinder.disableDebugFlash = false;
+						//	var actualCost = tempPath.TotalCost;
+						//	tempPath.Dispose();
+						//	if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
+						//		NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
+						//	NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest/1500f, knownBest + "\n(" + actualCost + ")");
+						//	if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
+						//}
 						regionMinLink[destRegion.id] = vertex.Link;
 						if (destRegion.id == region.id) {
 							minLink = vertex.Link;
@@ -290,6 +311,7 @@ namespace BetterPathfinding
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
 
+		private static IntVec3 RegionLinkCenter(RegionLink link) => new IntVec3(SpanCenterX(link.span), 0, SpanCenterZ(link.span));
 
 		private static int SpanEndX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length : 0);
 
