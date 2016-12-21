@@ -18,6 +18,15 @@ namespace BetterPathfinding
 		static DetourInjector()
 		{
 			LongEventHandler.QueueLongEvent(Inject, "Initializing", true, null);
+
+			#if DEBUG
+
+			if (Prefs.DevMode)
+			{
+				DebugViewSettings.drawPaths = true;
+			}
+
+			#endif
 		}
 
 		private static void Inject()
@@ -32,17 +41,26 @@ namespace BetterPathfinding
 
 		private static bool DoInject()
 		{
-			MethodInfo RimWorld_PathFinder_FindPath = typeof(Verse.AI.PathFinder).GetMethod("FindPath", new [] { typeof(IntVec3), typeof(TargetInfo), typeof(TraverseParms), typeof(PathEndMode) });
-			MethodInfo ModTest_PathFinder_FindPath = typeof(PathFinder).GetMethod("_FindPath", UniversalBindingFlags);
+			MethodInfo RimWorld_PathFinder_FindPath = typeof(Verse.AI.PathFinder).GetMethod("FindPath", new [] { typeof(IntVec3), typeof(LocalTargetInfo), typeof(TraverseParms), typeof(PathEndMode) });
+			MethodInfo ModTest_PathFinder_FindPath = typeof(PathFinderDetour).GetMethod("FindPath", UniversalBindingFlags);
 			if (!Detours.TryDetourFromTo(RimWorld_PathFinder_FindPath, ModTest_PathFinder_FindPath))
 				return false;
 
 
-			MethodInfo RimWorld_PathFinder_Reinit = typeof(Verse.AI.PathFinder).GetMethod("Reinit", UniversalBindingFlags);
-			MethodInfo ModTest_PathFinder_Reinit = typeof(PathFinder).GetMethod("_Reinit", UniversalBindingFlags);
-			if (!Detours.TryDetourFromTo(RimWorld_PathFinder_Reinit, ModTest_PathFinder_Reinit))
-				return false;
+			var assembly = typeof(GameInitData).Assembly;
+			var debugCellType = assembly.GetType("Verse.DebugCell");
+			if (!DoDetour(debugCellType, typeof(DebugCell), "OnGUI")) return false;
 
+			return true;
+		}
+
+
+		private static bool DoDetour(Type rimworld, Type mod, string method)
+		{
+			MethodInfo RimWorld_A = rimworld.GetMethod(method, UniversalBindingFlags);
+			MethodInfo ModTest_A = mod.GetMethod(method, UniversalBindingFlags);
+			if (!Detours.TryDetourFromTo(RimWorld_A, ModTest_A))
+				return false;
 			return true;
 		}
 

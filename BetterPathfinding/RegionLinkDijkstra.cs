@@ -8,24 +8,15 @@ using Verse;
 
 namespace BetterPathfinding
 {
-
-	public struct RegionLinkPathCostInfo
-	{
-		public int cost;
-		public RegionLink minLink;
-		public int minTilePathCost;
-		public bool isDifferentRegionsLink;
-	}
-
 	public class RegionLinkDijkstra
 	{
 
 		private struct RegionLinkQueueEntry
 		{
-			public Region FromRegion;
-			public RegionLink Link;
-			public int Cost;
-            public int EstimatedPathCost;
+			public readonly Region FromRegion;
+			public readonly RegionLink Link;
+			public readonly int Cost;
+            public readonly int EstimatedPathCost;
 
 			public RegionLinkQueueEntry(Region from, RegionLink l, int c, int tc)
 			{
@@ -51,26 +42,44 @@ namespace BetterPathfinding
 
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
 
-		private Func<int, int, int> costCalculator;
+		private readonly Func<int, int, int> costCalculator;
 
         private TraverseParms traverseParms;
 
-        private IntVec3 targetCell;
+        private readonly IntVec3 targetCell;
 
-		private ByteGrid avoidGrid;
+		private readonly ByteGrid avoidGrid;
+
+		private readonly Area area;
+
+		private readonly Map map;
 
 		public static int nodes_popped;
 
-		private Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
+		private readonly Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
-		public RegionLinkDijkstra(IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
+		//private NewPathFinder debugPathfinder;
+		public IntVec3 rootCell;
+
+		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
 		{
+			this.map = map;
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
+			this.rootCell = rootCell;
 			avoidGrid = parms.pawn?.GetAvoidGrid();
+			if (parms.pawn?.Drafted == false)
+			{
+				area = parms.pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
+			}
 			nodes_popped = 0;
-			
+
+			//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+			//{
+			//	debugPathfinder = new NewPathFinder(map);
+			//}
+
 			foreach (var region in startingRegions)
 			{
 				var minPathCost = RegionMinimumPathCost(region);
@@ -87,65 +96,6 @@ namespace BetterPathfinding
 			}
 		}
 
-		public RegionLinkPathCostInfo GetNextRegionOverDistance(Region region, out RegionLinkPathCostInfo? secondBest)
-		{
-			secondBest = null;
-			RegionLinkPathCostInfo result = new RegionLinkPathCostInfo();
-			RegionLink minLink;
-			result.cost = GetRegionDistance(region, out minLink);
-			RegionLinkPathCostInfo(region, minLink, ref result);
-
-			RegionLink secondBestLink = null;
-			int secondBestCost = Int32.MaxValue;
-
-			foreach (var link in region.links)
-			{
-				if(link == minLink) { continue; }
-
-				if (distances.ContainsKey(link))
-				{
-					var cost = distances[link];
-					if (cost < secondBestCost)
-					{
-						secondBestCost = cost;
-						secondBestLink = link;
-					}
-				}
-			}
-
-			if (secondBestLink != null)
-			{
-				var secondResult = new RegionLinkPathCostInfo();
-				secondResult.cost = secondBestCost;
-				RegionLinkPathCostInfo(region, secondBestLink, ref secondResult);
-				secondBest = secondResult;
-			}
-
-			return result;
-		}
-
-		private void RegionLinkPathCostInfo(Region region, RegionLink minLink, ref RegionLinkPathCostInfo result)
-		{
-			result.minLink = minLink;
-			result.minTilePathCost = RegionMinimumPathCost(region);
-			//In open terrain, returning the region link past the first helps smooth out discontinuities (reducing reopened nodes)
-			//In tighter areas, returning the next region link over hides the cost of obstructions, and
-			//shorter spans have smaller discontinuities so they cause fewer re-opens anyway
-			if (minLink.span.length < 9)
-			{
-				return;
-			}
-			var secondRegion = GetLinkOtherRegion(region, minLink);
-			if (!regionMinLink.ContainsKey(secondRegion.id)) //it's the destination region
-			{
-				return;
-			}
-			result.minTilePathCost = Mathf.Min(result.minTilePathCost, RegionMinimumPathCost(secondRegion));
-			result.minLink = regionMinLink[secondRegion.id];
-			result.isDifferentRegionsLink = true;
-			result.cost = distances[result.minLink];
-		}
-
 		public int GetRegionDistance(Region region, out RegionLink minLink)
 		{
 			if (regionMinLink.TryGetValue(region.id, out minLink))
@@ -160,13 +110,12 @@ namespace BetterPathfinding
 				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
                 {
                     var destRegion = GetLinkOtherRegion(vertex.FromRegion, vertex.Link);
-					
-					//I've never encountered this during testing, but users reported issues resolved by this check.
-					if (destRegion?.valid != true) { continue; }
 
-                    //TODO: lying about destination to avoid danger check... should it work this way?
-                    if (destRegion.portal != null)
-                    {
+					//I've never encountered this during testing, but users reported issues resolved by this check.
+	                if (destRegion?.valid != true) { continue; }
+
+					if (destRegion.portal != null)
+					{
 						//Not using Region.Allows because it is not entirely consistent with the pathfinder logic
 						//Resulting in errors when a door is within range of 22 turrets
 						switch (traverseParms.mode)
@@ -177,7 +126,7 @@ namespace BetterPathfinding
 									continue;
 								}
 								if (!destRegion.portal.FreePassage && !destRegion.portal.PawnCanOpen(traverseParms.pawn) &&
-								    !traverseParms.canBash)
+									!traverseParms.canBash)
 								{
 									continue;
 								}
@@ -189,7 +138,9 @@ namespace BetterPathfinding
 								}
 								break;
 						}
-                    }
+					}
+
+
 
 					var minPathCost = RegionMinimumPathCost(destRegion);
 					foreach (var current2 in destRegion.links)
@@ -216,6 +167,18 @@ namespace BetterPathfinding
 					}
 					//if this is the first vertex popped for the region, we've found the shortest path to that region
 					if (!regionMinLink.ContainsKey(destRegion.id)) {
+						//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+						//{
+						//	NewPathFinder.disableDebugFlash = true;
+						//	var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
+						//	NewPathFinder.disableDebugFlash = false;
+						//	var actualCost = tempPath.TotalCost;
+						//	tempPath.Dispose();
+						//	if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
+						//		NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
+						//	NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest/1500f, knownBest + "\n(" + actualCost + ")");
+						//	if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
+						//}
 						regionMinLink[destRegion.id] = vertex.Link;
 						if (destRegion.id == region.id) {
 							minLink = vertex.Link;
@@ -244,8 +207,13 @@ namespace BetterPathfinding
 			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
 				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
 				{
-					int index = CellIndices.CellToIndex(x, z);
-					minCost = Mathf.Min(minCost, Find.PathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0));
+					var index = this.map.cellIndices.CellToIndex(x, z);
+					var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0);
+					if (area != null && !area[index])
+					{
+						cellCost += 600;
+					}
+					minCost = Mathf.Min(minCost, cellCost);
 					if (minCost == 0)
 					{
 						minPathCosts[region] = 0;
@@ -274,6 +242,12 @@ namespace BetterPathfinding
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
 
 		private static int SpanCenterZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length / 2 : 0);
+
+		private static IntVec3 RegionLinkCenter(RegionLink link) => new IntVec3(SpanCenterX(link.span), 0, SpanCenterZ(link.span));
+
+		private static int SpanEndX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length : 0);
+
+		private static int SpanEndZ(EdgeSpan e) => e.root.z + (e.dir == SpanDirection.North ? e.length : 0);
 
 		public static int RegionLinkCenterDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
 		{
