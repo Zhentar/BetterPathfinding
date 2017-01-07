@@ -47,7 +47,7 @@ namespace BetterPathfinding
 
 			public int heuristicCost;
 
-			public ushort edgeCost;
+			public ushort perceivedPathCost;
 
 			public ushort parentX;
 
@@ -176,12 +176,12 @@ namespace BetterPathfinding
 		
 		private int debug_closedCellsReopened;
 
-		private int[] neighIndexes = { -1, -1, -1, -1, -1, -1, -1, -1 };
+		private readonly int[] neighIndexes = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
-		private SimpleCurve regionHeuristicWeight = new SimpleCurve
-		{	//x values get adjusted 
-			new CurvePoint(1, 1.25f),
-			new CurvePoint(2, 1.12f),
+		private readonly SimpleCurve regionHeuristicWeight = new SimpleCurve
+		{	//x values get adjusted each run
+			new CurvePoint(1, 1.2f),
+			new CurvePoint(2, 1.1f),
 			new CurvePoint(4, 1.05f)
 		};
 
@@ -372,8 +372,8 @@ namespace BetterPathfinding
 					heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength/(float) moveTicksCardinal));
 				}
 				else
-				{	//Capped to 20,000 because otherwise long paths outside of allowed areas get ridiculous weightings
-					var totalCostEst = Math.Min(regionCost.GetPathCostToRegion(curIndex), 20000);
+				{	
+					var totalCostEst = regionCost.GetPathCostToRegion(curIndex);
 					regionHeuristicWeight[1].x = totalCostEst / 2;
 					regionHeuristicWeight[2].x = totalCostEst;
 				}
@@ -460,7 +460,7 @@ namespace BetterPathfinding
 						if ((calcGrid[neighIndex].status != statusClosedValue) && (calcGrid[neighIndex].status != statusOpenValue))
 						{
 							#region edge cost
-							calcGrid[neighIndex].edgeCost = 10000;
+							calcGrid[neighIndex].perceivedPathCost = 10000;
 							int cost = 0;
 							bool notWalkable = false;
 							if (!pathGrid.WalkableFast(neighX, neighZ))
@@ -479,36 +479,7 @@ namespace BetterPathfinding
 								}
 								cost += (int) (edifice.HitPoints*0.1f);
 							}
-							if (i > 3)
-							{
-								switch (i)
-								{
-									case 4:
-										if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ))
-										{
-											continue;
-										}
-										break;
-									case 5:
-										if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ))
-										{
-											continue;
-										}
-										break;
-									case 6:
-										if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ))
-										{
-											continue;
-										}
-										break;
-									case 7:
-										if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ))
-										{
-											continue;
-										}
-										break;
-								}
-							}
+							
 							neighCost = 0;
 							neighCost += cost;
 							if (!notWalkable)
@@ -583,7 +554,7 @@ namespace BetterPathfinding
 								PfProfilerEndSample();
 							}
 							//Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
-							calcGrid[neighIndex].edgeCost = (ushort)Mathf.Max(neighCost, 1);
+							calcGrid[neighIndex].perceivedPathCost = (ushort)Mathf.Max(neighCost, 1);
 							#endregion
 #if DEBUG
 							calcGrid[neighIndex].timesPopped = 0;
@@ -620,7 +591,38 @@ namespace BetterPathfinding
 							#endregion
 						}
 
-						if (calcGrid[neighIndex].edgeCost < 10000)
+						if (i > 3)
+						{
+							switch (i)
+							{
+								case 4:
+									if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ))
+									{
+										continue;
+									}
+									break;
+								case 5:
+									if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ))
+									{
+										continue;
+									}
+									break;
+								case 6:
+									if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ))
+									{
+										continue;
+									}
+									break;
+								case 7:
+									if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ))
+									{
+										continue;
+									}
+									break;
+							}
+						}
+
+						if (calcGrid[neighIndex].perceivedPathCost < 10000)
 						{
 							neighIndexes[i] = neighIndex;
 						}
@@ -637,7 +639,7 @@ namespace BetterPathfinding
 							{
 								continue;
 							}
-							bestH = Math.Max(bestH, calcGrid[neighIndex].heuristicCost - (calcGrid[neighIndex].edgeCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal)));
+							bestH = Math.Max(bestH, calcGrid[neighIndex].heuristicCost - (calcGrid[neighIndex].perceivedPathCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal)));
 						}
 					}
 
@@ -656,8 +658,12 @@ namespace BetterPathfinding
 							continue;
 						}
 
-
-						var thisDirEdgeCost = calcGrid[neighIndex].edgeCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
+						//When path costs are significantly higher than move costs (e.g. snowy ice, or outside of allowed areas), 
+						//small differences in the weighted heuristic overwhelm the added cost of diagonal movement, so nodes
+						//can often be visited in unecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
+						//paths if they are not revisited. Weighting the diagonal path cost slightly counteracts this behavior, and
+						//should result in natural looking paths when it does cause suboptimal behavior
+						var thisDirEdgeCost = (i > 3 ? Mathf.RoundToInt(calcGrid[neighIndex].perceivedPathCost * 1.2f) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
 						neighCostThroughCur = thisDirEdgeCost + calcGrid[curIndex].knownCost;
 						//Pathmax Rule 1
 						int nodeH = mode == HeuristicMode.Better ? Mathf.Max(calcGrid[neighIndex].heuristicCost, bestH - thisDirEdgeCost) : calcGrid[neighIndex].heuristicCost;
