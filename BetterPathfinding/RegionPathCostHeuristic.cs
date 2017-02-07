@@ -26,6 +26,8 @@ namespace BetterPathfinding
 		private int lastRegionId = -1;
 		private RegionLink bestLink;
 		private int bestLinkCost;
+		private RegionLink secondBestLink;
+		private int secondBestLinkCost;
 		private int lastRegionTilePathCost;
         private readonly TraverseParms traverseParms;
 
@@ -71,6 +73,7 @@ namespace BetterPathfinding
 			{
 				NewPathFinder.PfProfilerBeginSample("Get Region Distance"); 
 				bestLinkCost = distanceBuilder.GetRegionDistance(region, out bestLink);
+				secondBestLinkCost = distanceBuilder.GetRegionSecondBestDistance(region, out secondBestLink);
 				lastRegionTilePathCost = distanceBuilder.RegionMinimumPathCost(region);
 				NewPathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
@@ -79,6 +82,11 @@ namespace BetterPathfinding
 			if (bestLink != null)
 			{
 				var costToLink = RegionLinkDijkstra.RegionLinkDistance(cell, bestLink, OctileDistance, lastRegionTilePathCost);
+				if (secondBestLink != null)
+				{
+					var costToSecondLink = RegionLinkDijkstra.RegionLinkDistance(cell, secondBestLink, OctileDistance, lastRegionTilePathCost);
+					return Math.Min(secondBestLinkCost + costToSecondLink, bestLinkCost + costToLink);
+				}
 				return bestLinkCost + costToLink;
 			}
 

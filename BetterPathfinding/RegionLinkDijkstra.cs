@@ -191,6 +191,52 @@ namespace BetterPathfinding
 			return 100000;
 		}
 
+
+		public int GetRegionSecondBestDistance(Region region, out RegionLink secondBestLink)
+		{
+			RegionLink bestLink;
+			GetRegionDistance(region, out bestLink);
+
+			//var secondBest = region.links.Where(l => l != bestLink).Min(new LinkDistanceComparer(distances));
+
+			secondBestLink = null;
+			int secondBestCost = Int32.MaxValue;
+
+			foreach (var link in region.links)
+			{
+				if (link == bestLink) { continue; }
+
+				if (distances.ContainsKey(link))
+				{
+					var cost = distances[link];
+					if (cost < secondBestCost)
+					{
+						secondBestCost = cost;
+						secondBestLink = link;
+					}
+				}
+			}
+
+			return secondBestCost;
+		}
+
+		private class LinkDistanceComparer : IComparer<RegionLink>
+		{
+			private Dictionary<RegionLink, int> distances;
+
+			public LinkDistanceComparer(Dictionary<RegionLink, int> distanceDict)
+			{
+				distances = distanceDict;
+			}
+
+			public int Compare(RegionLink a, RegionLink b)
+			{
+				var aDist = distances.ContainsKey(a) ? distances[a] : int.MaxValue;
+				var bDist = distances.ContainsKey(b) ? distances[b] : int.MaxValue;
+
+				return  aDist.CompareTo(bDist);
+			}
+		}
 		//If we just use the pawn move speed as the path cost, we're effectively telling A* "there might be a road around here somewhere, keep looking!"
 		//This makes it expand a whole lot more nodes than necessary in open, rough terrain, searching high and low for that alleged road.
 		//Finding the minimum path cost of any tile in the region is a cheap way to guess if that road could possibly exist.
@@ -236,7 +282,7 @@ namespace BetterPathfinding
 			int dx = Mathf.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
 			int dz = Mathf.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
 
-			return costCalculator(dx, dz) + minPathCost * Mathf.Max(dx, dz);
+			return costCalculator(dx, dz) + minPathCost * Mathf.Max(dx, dz) + Mathf.FloorToInt(minPathCost * Mathf.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
 		}
 
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
@@ -270,7 +316,7 @@ namespace BetterPathfinding
                 dz = Mathf.Abs(cell.z - link.span.root.z);
                 dx = GetValue(cell.x, link.span.root.x, link.span.length);
             }
-            return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
+            return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz) + Mathf.FloorToInt(minPathCost * Mathf.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
         }
 
         private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
