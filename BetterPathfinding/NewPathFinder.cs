@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using RimWorld;
-using UnityEngine;
 using Verse;
 using Verse.AI;
 
@@ -395,7 +394,7 @@ namespace BetterPathfinding
 			}
 			else {
 				float lengthHorizontal = (start - dest.Cell).LengthHorizontal;
-				heuristicStrength = Mathf.RoundToInt(HeuristicStrengthHuman_DistanceCurve.Evaluate(lengthHorizontal));
+				heuristicStrength = (int)Math.Round(HeuristicStrengthHuman_DistanceCurve.Evaluate(lengthHorizontal));
 			}
 			closedCellCount = 0;
 			openList.Clear();
@@ -413,7 +412,7 @@ namespace BetterPathfinding
 				if (canPassAnything)
 				{
 					//Roughly preserves the Vanilla behavior of increasing path accuracy for shorter paths and slower pawns, though not as smoothly. Only applies to sappers.
-					heuristicStrength = Mathf.Max(1, Mathf.RoundToInt(heuristicStrength/(float) moveTicksCardinal));
+					heuristicStrength = Math.Max(1, (int)Math.Round(heuristicStrength/(float) moveTicksCardinal));
 				}
 				else
 				{
@@ -602,25 +601,25 @@ namespace BetterPathfinding
 							switch (mode)
 							{
 								case HeuristicMode.Vanilla:
-									h = heuristicStrength * (Mathf.Abs(neighX - destinationX) + Mathf.Abs(neighZ - destinationZ));
+									h = heuristicStrength * (Math.Abs(neighX - destinationX) + Math.Abs(neighZ - destinationZ));
 									break;
 								case HeuristicMode.AdmissableOctile:
 									{
-										var dx = Mathf.Abs(neighX - destinationX);
-										var dy = Mathf.Abs(neighZ - destinationZ);
-										h = moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dy);
+										var dx = Math.Abs(neighX - destinationX);
+										var dy = Math.Abs(neighZ - destinationZ);
+										h = moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Math.Min(dx, dy);
 									}
 									break;
 								case HeuristicMode.Better:
 									if (canPassAnything)
 									{
-										var dx = Mathf.Abs(neighX - destinationX);
-										var dy = Mathf.Abs(neighZ - destinationZ);
-										h = heuristicStrength * (moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dy));
+										var dx = Math.Abs(neighX - destinationX);
+										var dy = Math.Abs(neighZ - destinationZ);
+										h = heuristicStrength * (moveTicksCardinal * (dx + dy) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Math.Min(dx, dy));
 									}
 									else
 									{
-										h = Mathf.FloorToInt(regionCost.GetPathCostToRegion(neighIndex)/* * regionHeuristicWeight2.Evaluate(calcGrid[curIndex].knownCost)*/);
+										h = regionCost.GetPathCostToRegion(neighIndex);
 									}
 									break;
 							}
@@ -651,12 +650,12 @@ namespace BetterPathfinding
 							neighIndexes[i] = neighIndex;
 						}
 						else if ((calcGrid[neighIndex].status == statusOpenValue || calcGrid[neighIndex].status == statusClosedValue) && 
-							(i > 3 ? Mathf.FloorToInt(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost)
+							(i > 3 ? (int)Math.Floor(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost)
 						{
 							if (calcGrid[neighIndex].status == statusClosedValue) { Log.Message($"{curIntVec3} updating from closed node, old cost {calcGrid[curIndex].knownCost}, old parent {new IntVec3(calcGrid[curIndex].parentX, 0, calcGrid[curIndex].parentZ)}, new parent {cellIndices.IndexToCell(neighIndex)}");}
 							calcGrid[curIndex].parentX = neighX;
 							calcGrid[curIndex].parentZ = neighZ;
-							calcGrid[curIndex].knownCost = (i > 3 ? Mathf.FloorToInt(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost;
+							calcGrid[curIndex].knownCost = (i > 3 ? (int)Math.Floor(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost;
 						}
 
 					}
@@ -697,14 +696,14 @@ namespace BetterPathfinding
 						//can often be visited in unecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
 						//paths if they are not revisited. Weighting the diagonal path cost slightly counteracts this behavior, and
 						//should result in natural looking paths when it does cause suboptimal behavior
-						var thisDirEdgeCost = (i > 3 ? Mathf.FloorToInt(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
+						var thisDirEdgeCost = (i > 3 ? (int)Math.Floor(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
 
 						//var thisDirEdgeCost = calcGrid[neighIndex].perceivedPathCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
 						//Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
-						thisDirEdgeCost = (ushort)Mathf.Max(thisDirEdgeCost, 1);
+						thisDirEdgeCost = (ushort)Math.Max(thisDirEdgeCost, 1);
 						neighCostThroughCur = thisDirEdgeCost + calcGrid[curIndex].knownCost;
 						//Pathmax Rule 1
-						int nodeH = (mode == HeuristicMode.Better && pathmaxEnabled) ? Mathf.Max(calcGrid[neighIndex].heuristicCost, bestH - thisDirEdgeCost) : calcGrid[neighIndex].heuristicCost;
+						int nodeH = (mode == HeuristicMode.Better && pathmaxEnabled) ? Math.Max(calcGrid[neighIndex].heuristicCost, bestH - thisDirEdgeCost) : calcGrid[neighIndex].heuristicCost;
 
 						if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 						{

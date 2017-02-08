@@ -1,11 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
-using UnityEngine;
 using Verse;
 
 namespace BetterPathfinding
@@ -57,8 +53,8 @@ namespace BetterPathfinding
 
 			if (rootRegions.Contains(region))
 			{
-				var dx = Mathf.Abs(cell.x - targetCell.x);
-				var dz = Mathf.Abs(cell.z - targetCell.z);
+				var dx = Math.Abs(cell.x - targetCell.x);
+				var dz = Math.Abs(cell.z - targetCell.z);
 				return OctileDistance(dx, dz);
 			}
 
@@ -93,6 +89,6 @@ namespace BetterPathfinding
 			return 1000000; //shouldn't happen except for sappers
 		}
 
-		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Mathf.Min(dx, dz));
+		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Math.Min(dx, dz));
 	}
 }

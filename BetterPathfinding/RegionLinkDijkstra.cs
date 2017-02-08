@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using RimWorld;
-using UnityEngine;
 using Verse;
 
 namespace BetterPathfinding
@@ -259,7 +256,7 @@ namespace BetterPathfinding
 					{
 						cellCost += 600;
 					}
-					minCost = Mathf.Min(minCost, cellCost);
+					minCost = Math.Min(minCost, cellCost);
 					if (minCost == 0)
 					{
 						minPathCosts[region] = 0;
@@ -279,10 +276,10 @@ namespace BetterPathfinding
 
 		private int RegionLinkDistance(RegionLink a, RegionLink b, int minPathCost)
 		{
-			int dx = Mathf.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
-			int dz = Mathf.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
+			int dx = Math.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
+			int dz = Math.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
 
-			return costCalculator(dx, dz) + minPathCost * Mathf.Max(dx, dz) + Mathf.FloorToInt(minPathCost * Mathf.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+			return costCalculator(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
 		}
 
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
@@ -297,10 +294,10 @@ namespace BetterPathfinding
 
 		public static int RegionLinkCenterDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
 		{
-			int dx = Mathf.Abs(cell.x - SpanCenterX(link.span));
-			int dz = Mathf.Abs(cell.z - SpanCenterZ(link.span));
+			int dx = Math.Abs(cell.x - SpanCenterX(link.span));
+			int dz = Math.Abs(cell.z - SpanCenterZ(link.span));
 
-			return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz);
+			return cost(dx, dz) + minPathCost * Math.Max(dx, dz);
 		}
 
 		public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
@@ -308,18 +305,18 @@ namespace BetterPathfinding
             int dx, dz;
             if (link.span.dir == SpanDirection.North)
             {
-                dx = Mathf.Abs(cell.x - link.span.root.x);
+                dx = Math.Abs(cell.x - link.span.root.x);
                 dz = GetValue(cell.z, link.span.root.z, link.span.length);
             }
             else
             {
-                dz = Mathf.Abs(cell.z - link.span.root.z);
+                dz = Math.Abs(cell.z - link.span.root.z);
                 dx = GetValue(cell.x, link.span.root.x, link.span.length);
             }
-            return cost(dx, dz) + minPathCost * Mathf.Max(dx, dz) + Mathf.FloorToInt(minPathCost * Mathf.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+            return cost(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
         }
 
-        private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Mathf.Max(cellz - (spanz + spanLen), 0);
+        private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Math.Max(cellz - (spanz + spanLen), 0);
 
         private static Region GetLinkOtherRegion(Region fromRegion, RegionLink link) =>  Equals(fromRegion, link.RegionA) ? link.RegionB : link.RegionA;
     }
