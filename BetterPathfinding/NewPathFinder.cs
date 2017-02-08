@@ -9,7 +9,7 @@ using Verse.AI;
 
 namespace BetterPathfinding
 {
-
+#region Injection Code
 	static class PathFinderDetour
 	{
 
@@ -38,6 +38,7 @@ namespace BetterPathfinding
 			PathFinder = new NewPathFinder(map);
 		}
 	}
+#endregion
 
 	class NewPathFinder
 	{
@@ -120,15 +121,9 @@ namespace BetterPathfinding
 
 		private ushort statusClosedValue = 2;
 
-		private int mapSizePowTwo;
+		private readonly int mapSizeX;
 
-		private ushort gridSizeX;
-
-		private ushort gridSizeZ;
-
-		private int mapSizeX;
-
-		private int mapSizeZ;
+		private readonly int mapSizeZ;
 
 		private PathGrid pathGrid;
 
@@ -188,6 +183,8 @@ namespace BetterPathfinding
 
 		private SimpleCurve regionHeuristicWeight = null;
 
+		//With a flat weight on the heurestic, it ends up trying very hard near the end of the path, while ignoring easy opportunities early on in the path
+		//Weighting it on a curve lets us spread more of the effort across the whole path, getting the easy gains whereever they are along the path.
 		private readonly SimpleCurve regionHeuristicWeightReal = new SimpleCurve
 		{	//x values get adjusted each run
 			new CurvePoint(0, 1.05f),
@@ -217,9 +214,9 @@ namespace BetterPathfinding
 		public NewPathFinder(Map map)
 		{
 			this.map = map;
-			mapSizePowTwo = map.info.PowerOfTwoOverMapSize;
-			gridSizeX = (ushort)mapSizePowTwo;
-			gridSizeZ = (ushort)mapSizePowTwo;
+			var mapSizePowTwo = map.info.PowerOfTwoOverMapSize;
+			var gridSizeX = (ushort)mapSizePowTwo;
+			var gridSizeZ = (ushort)mapSizePowTwo;
 			mapSizeX = map.Size.x;
 			mapSizeZ = map.Size.z;
 			calcGrid = new PathFinderNodeFast[gridSizeX * gridSizeZ];
@@ -321,8 +318,12 @@ namespace BetterPathfinding
 			return result;
 		}
 
+		//The standard A* search algorithm has been modified to implement the bidirectional pathmax algorithm
+		//("Inconsistent heuristics in theory and practice" Felner et al.) http://web.cs.du.edu/~sturtevant/papers/incnew.pdf
 		internal PawnPath FindPathInner(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, HeuristicMode mode = HeuristicMode.Better)
 		{
+			//The initialization is largely unchanged from Core, aside from coding style in some spots
+#region initialization
 			if (DebugSettings.pathThroughWalls) {
 				traverseParms.mode = TraverseMode.PassAnything;
 			}
@@ -405,6 +406,7 @@ namespace BetterPathfinding
 			moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 18;
 			var diagonalAddedTicks = moveTicksDiagonal - moveTicksCardinal;
 
+			//Where the magic happens
 			RegionPathCostHeuristic regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, moveTicksCardinal, moveTicksDiagonal);
 
 			if (mode == HeuristicMode.Better)
@@ -437,6 +439,8 @@ namespace BetterPathfinding
 			if (pawn != null) {
 				shouldCollideWithPawns = PawnUtility.ShouldCollideWithPawns(pawn);
 			}
+			#endregion
+
 			while (true) {
 				PfProfilerBeginSample("Open cell pop");
 				if (openList.Count <= 0) {
@@ -649,13 +653,12 @@ namespace BetterPathfinding
 						{
 							neighIndexes[i] = neighIndex;
 						}
-						else if ((calcGrid[neighIndex].status == statusOpenValue || calcGrid[neighIndex].status == statusClosedValue) && 
-							(i > 3 ? (int)Math.Floor(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost)
+						if ((calcGrid[neighIndex].status == statusOpenValue && 
+							(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost))
 						{
-							if (calcGrid[neighIndex].status == statusClosedValue) { Log.Message($"{curIntVec3} updating from closed node, old cost {calcGrid[curIndex].knownCost}, old parent {new IntVec3(calcGrid[curIndex].parentX, 0, calcGrid[curIndex].parentZ)}, new parent {cellIndices.IndexToCell(neighIndex)}");}
 							calcGrid[curIndex].parentX = neighX;
 							calcGrid[curIndex].parentZ = neighZ;
-							calcGrid[curIndex].knownCost = (i > 3 ? (int)Math.Floor(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost;
+							calcGrid[curIndex].knownCost = (i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal) + calcGrid[neighIndex].knownCost;
 						}
 
 					}
@@ -696,7 +699,7 @@ namespace BetterPathfinding
 						//can often be visited in unecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
 						//paths if they are not revisited. Weighting the diagonal path cost slightly counteracts this behavior, and
 						//should result in natural looking paths when it does cause suboptimal behavior
-						var thisDirEdgeCost = (i > 3 ? (int)Math.Floor(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
+						var thisDirEdgeCost = (i > 3 ? (int)(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
 
 						//var thisDirEdgeCost = calcGrid[neighIndex].perceivedPathCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
 						//Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
@@ -739,8 +742,7 @@ namespace BetterPathfinding
 						}
 						//else if (calcGrid[neighIndex].status != statusOpenValue)
 						//{
-						//	DebugFlash(cellIndices.IndexToCell(neighIndex), 0.2f, "\n\n\n" /*+ actualCost + "\n"*/ + $"{calcGrid[curIndex].knownCost + calcGrid[curIndex].originalHeuristicCost} + { calcGrid[curIndex].knownCost + (i > 3 ? 0 : +diagonalAddedTicks) + (int)Math.Ceiling((nodeH + thisDirEdgeCost + (i > 3 ? 0 : -diagonalAddedTicks)) * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))}");
-
+						//	DebugFlash(cellIndices.IndexToCell(neighIndex), 0.2f, $"\n\n{calcGrid[neighIndex].originalHeuristicCost + neighCostThroughCur}\n" + $"{calcGrid[curIndex].knownCost} + {(int) Math.Ceiling((nodeH + thisDirEdgeCost) * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))}");
 						//}
 #endif
 
@@ -752,9 +754,8 @@ namespace BetterPathfinding
 						calcGrid[neighIndex].heuristicCost = nodeH;
 						
 						PfProfilerBeginSample("Push Open");
-						//the movement cost difference between cardinal and diagonal doesn't get weighted, because otherwise it causes unnecessary diagonal movement, because it doesn't change rounding at the same time
-						openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[curIndex].knownCost + (i > 3 ? +diagonalAddedTicks : 0) 
-																		+ (int)Math.Ceiling((nodeH + thisDirEdgeCost + (i > 3 ? -diagonalAddedTicks : 0))  * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))));
+						openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[curIndex].knownCost
+																		+ (int)Math.Ceiling((nodeH + thisDirEdgeCost)  * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))));
 						debug_totalOpenListCount++;
 						PfProfilerEndSample();
 					}
