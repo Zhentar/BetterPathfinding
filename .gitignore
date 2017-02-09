@@ -3,3 +3,6 @@
 /.vs
 /Assembly-CSharp.dll
 /UnityEngine.dll
+/OfflineTester/bin
+/OfflineTester/obj
+*.dll

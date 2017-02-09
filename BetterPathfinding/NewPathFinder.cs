@@ -40,9 +40,9 @@ namespace BetterPathfinding
 	}
 #endregion
 
-	class NewPathFinder
+	public class NewPathFinder
 	{
-		internal struct PathFinderNodeFast
+		private struct PathFinderNodeFast
 		{
 			public int knownCost;
 
@@ -243,8 +243,7 @@ namespace BetterPathfinding
 #if DEBUG
 			if (traverseParms.pawn != null)
 			{
-				Log.Message("Pathfinding times for pawn " + traverseParms.pawn + ", mode: " + traverseParms.mode.ToString());
-				//Log.Message("Move speed: " + traverseParms.pawn.TicksPerMoveCardinal + "," + traverseParms.pawn.TicksPerMoveDiagonal);
+				Log.Message($"Pathfinding times for pawn {traverseParms.pawn}, mode: {traverseParms.mode}\n Move speed: {traverseParms.pawn.TicksPerMoveCardinal}, {traverseParms.pawn.TicksPerMoveDiagonal}");
 			}
 			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
@@ -314,7 +313,9 @@ namespace BetterPathfinding
 			}
 			Log.Message(profsb.ToString());
 #endif
-
+#if DEBUG
+			//if (debug_openCellsPopped > 2500) { PathDataDumper.SaveFromPathCall(this.map, start, dest, traverseParms, peMode); }
+#endif
 			return result;
 		}
 
@@ -403,7 +404,7 @@ namespace BetterPathfinding
 			debug_totalOpenListCount = 0;
 			debug_openCellsPopped = 0;
 			moveTicksCardinal = pawn?.TicksPerMoveCardinal ?? 13;
-			moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 18;
+			moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 19; //19 for a normal speed humanlike wearing a jacket or other speed affecting clothes
 			var diagonalAddedTicks = moveTicksDiagonal - moveTicksCardinal;
 
 			//Where the magic happens
