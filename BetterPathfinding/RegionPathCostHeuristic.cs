@@ -26,6 +26,7 @@ namespace BetterPathfinding
 		private int secondBestLinkCost;
 		private int lastRegionTilePathCost;
         private readonly TraverseParms traverseParms;
+		private readonly NewPathFinder.PawnPathCostSettings pathCosts;
 
 		private static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
 
@@ -34,13 +35,14 @@ namespace BetterPathfinding
 		private Region[] regionGrid { get { return regionGridGet(this.map.regionGrid); } set { regionGridInfo.SetValue(this, value); } }
 
 
-		public RegionPathCostHeuristic(Map map, IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, int cardinal, int diagonal)
+		public RegionPathCostHeuristic(Map map, IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts)
 		{
 			this.map = map;
 			startCell = start;
 			targetCell = end.CenterCell;
-			moveTicksCardinal = cardinal;
-			moveTicksDiagonal = diagonal;
+			moveTicksCardinal = pathCosts.moveTicksCardinal;
+			moveTicksDiagonal = pathCosts.moveTicksDiagonal;
+			this.pathCosts = pathCosts;
 
 			rootRegions = new HashSet<Region>(destRegions);
             traverseParms = parms;
@@ -61,7 +63,7 @@ namespace BetterPathfinding
 			if (distanceBuilder == null)
 			{
 				NewPathFinder.PfProfilerBeginSample("Distance Map Init");
-				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, OctileDistance);
+				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, pathCosts, OctileDistance);
 				NewPathFinder.PfProfilerEndSample();
 			}
 

@@ -58,18 +58,15 @@ namespace BetterPathfinding
 		//private NewPathFinder debugPathfinder;
 		public IntVec3 rootCell;
 
-		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, Func<int, int, int> cost)
+		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts, Func<int, int, int> cost)
 		{
 			this.map = map;
 			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
 			this.rootCell = rootCell;
-			avoidGrid = parms.pawn?.GetAvoidGrid();
-			if (parms.pawn?.Drafted == false)
-			{
-				area = parms.pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
-			}
+			avoidGrid = pathCosts.avoidGrid;
+			area = pathCosts.area;
 			nodes_popped = 0;
 
 			//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)

@@ -8,7 +8,7 @@ using Verse;
 
 namespace BetterPathfinding
 {
-	class Utils
+	public class Utils
 	{
 		public static Func<TObject, TValue> GetFieldAccessor<TObject, TValue>(string fieldName)
 		{

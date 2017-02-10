@@ -111,6 +111,17 @@ namespace BetterPathfinding
 			public readonly int gridIndex;
 		}
 
+		public struct PawnPathCostSettings
+		{
+			public int moveTicksCardinal;
+
+			public int moveTicksDiagonal;
+
+			public ByteGrid avoidGrid;
+
+			public Area area;
+		}
+
 		private Map map;
 
 		private BpmxFastPriortyQueue openList;
@@ -319,6 +330,44 @@ namespace BetterPathfinding
 			return result;
 		}
 
+
+		private bool ValidateFindPathParameters(Pawn pawn, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, bool canPassAnything)
+		{
+			if (pawn != null && pawn.Map != this.map)
+			{
+				Log.Error(string.Concat("Tried to FindPath for pawn which is spawned in another map. His map PathFinder should have been used, not this one. pawn=", pawn, " pawn.Map=", pawn.Map, " map=", this.map));
+				return false;
+			}
+
+			if (!start.IsValid)
+			{
+				Log.Error(string.Concat("Tried to FindPath with invalid start ", start, ", pawn= ", pawn));
+				return false;
+			}
+			if (!dest.IsValid)
+			{
+				Log.Error(string.Concat("Tried to FindPath with invalid dest ", dest, ", pawn= ", pawn));
+				return false;
+			}
+
+			if (!canPassAnything)
+			{
+				if (!this.map.reachability.CanReach(start, dest, peMode, traverseParms))
+				{
+					return false;
+				}
+				map.regionAndRoomUpdater.RebuildDirtyRegionsAndRooms();
+			}
+			else if (dest.HasThing && dest.Thing.Map != this.map)
+			{
+				return false;
+			}
+			return true;
+		}
+
+
+
+
 		//The standard A* search algorithm has been modified to implement the bidirectional pathmax algorithm
 		//("Inconsistent heuristics in theory and practice" Felner et al.) http://web.cs.du.edu/~sturtevant/papers/incnew.pdf
 		internal PawnPath FindPathInner(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, HeuristicMode mode = HeuristicMode.Better)
@@ -331,35 +380,13 @@ namespace BetterPathfinding
 			Pawn pawn = traverseParms.pawn;
 			bool canPassAnything = traverseParms.mode == TraverseMode.PassAnything;
 
-			if (pawn != null && pawn.Map != this.map)
-			{
-				Log.Error(string.Concat("Tried to FindPath for pawn which is spawned in another map. His map PathFinder should have been used, not this one. pawn=", pawn, " pawn.Map=", pawn.Map, " map=", this.map));
-				return PawnPath.NotFound;
-			}
-
-			if (!start.IsValid) {
-				Log.Error(string.Concat("Tried to FindPath with invalid start ", start, ", pawn= ", pawn));
-				return PawnPath.NotFound;
-			}
-			if (!dest.IsValid) {
-				Log.Error(string.Concat("Tried to FindPath with invalid dest ", dest, ", pawn= ", pawn));
-				return PawnPath.NotFound;
-			}
-
-			if (!canPassAnything) {
-				if (!this.map.reachability.CanReach(start, dest, peMode, traverseParms))
-				{
-					return PawnPath.NotFound;
-				}
-				map.regionAndRoomUpdater.RebuildDirtyRegionsAndRooms();
-			}
-			else if (dest.HasThing && dest.Thing.Map != this.map)
+			if (!ValidateFindPathParameters(pawn, start, dest, traverseParms, peMode, canPassAnything))
 			{
 				return PawnPath.NotFound;
 			}
 
 
-			ByteGrid avoidGrid = pawn?.GetAvoidGrid();
+			
 			PfProfilerBeginSample(string.Concat("FindPath for ", pawn, " from ", start, " to ", dest, (!dest.HasThing) ? string.Empty : (" at " + dest.Cell)));
 			destinationX = dest.Cell.x;
 			destinationZ = dest.Cell.z;
@@ -403,12 +430,15 @@ namespace BetterPathfinding
 			debug_pathFailMessaged = false;
 			debug_totalOpenListCount = 0;
 			debug_openCellsPopped = 0;
-			moveTicksCardinal = pawn?.TicksPerMoveCardinal ?? 13;
-			moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 19; //19 for a normal speed humanlike wearing a jacket or other speed affecting clothes
+
+			PawnPathCostSettings pawnPathCosts = GetPawnPathCostSettings(traverseParms.pawn);
+
+			moveTicksCardinal = pawnPathCosts.moveTicksCardinal;
+			moveTicksDiagonal = pawnPathCosts.moveTicksDiagonal;
 			var diagonalAddedTicks = moveTicksDiagonal - moveTicksCardinal;
 
 			//Where the magic happens
-			RegionPathCostHeuristic regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, moveTicksCardinal, moveTicksDiagonal);
+			RegionPathCostHeuristic regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, pawnPathCosts);
 
 			if (mode == HeuristicMode.Better)
 			{
@@ -431,10 +461,7 @@ namespace BetterPathfinding
 			calcGrid[curIndex].parentZ = (ushort)start.z;
 			calcGrid[curIndex].status = statusOpenValue;
 			openList.Push(new CostNode(curIndex, 0));
-			Area area = null;
-			if (pawn?.Drafted == false) {
-				area = pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap;
-			}
+			
 
 			bool shouldCollideWithPawns = false;
 			if (pawn != null) {
@@ -513,7 +540,7 @@ namespace BetterPathfinding
 						{
 							#region edge cost
 							calcGrid[neighIndex].perceivedPathCost = 10000;
-							int cost = 0;
+							neighCost = 0;
 							bool notWalkable = false;
 							if (!pathGrid.WalkableFast(neighX, neighZ))
 							{
@@ -523,26 +550,24 @@ namespace BetterPathfinding
 									continue;
 								}
 								notWalkable = true;
-								cost += 60;
+								neighCost += 60;
 								Thing edifice = edificeGrid[neighIndex];
 								if (edifice == null || !edifice.def.useHitPoints)
 								{
 									continue;
 								}
-								cost += (int) (edifice.HitPoints*0.1f);
+								neighCost += (int) (edifice.HitPoints*0.1f);
 							}
 							
-							neighCost = 0;
-							neighCost += cost;
 							if (!notWalkable)
 							{
 								neighCost += pathGridDirect[neighIndex];
 							}
-							if (avoidGrid != null)
+							if (pawnPathCosts.avoidGrid != null)
 							{
-								neighCost += avoidGrid[neighIndex]*8;
+								neighCost += pawnPathCosts.avoidGrid[neighIndex]*8;
 							}
-							if (area != null && !area[neighIndex])
+							if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
 							{
 								neighCost += 600;
 							}
@@ -553,48 +578,9 @@ namespace BetterPathfinding
 							Building building = edificeGrid[neighIndex];
 							if (building != null)
 							{
-								PfProfilerBeginSample("Edifices");
-								Building_Door building_Door = building as Building_Door;
-								if (building_Door != null)
-								{
-									switch (traverseParms.mode)
-									{
-										case TraverseMode.ByPawn:
-											if (!traverseParms.canBash && building_Door.IsForbiddenToPass(pawn))
-											{
-												if (DebugViewSettings.drawPaths) { DebugFlash(building.Position, 0.77f, "forbid"); }
-												PfProfilerEndSample();
-												continue;
-											}
-											if (!building_Door.FreePassage)
-											{
-												if (building_Door.PawnCanOpen(pawn)) { neighCost += building_Door.TicksToOpenNow; }
-												else
-												{
-													if (!traverseParms.canBash)
-													{
-														if (DebugViewSettings.drawPaths) { DebugFlash(building.Position, 0.34f, "cant pass"); }
-														PfProfilerEndSample();
-														continue;
-													}
-													neighCost += 300;
-												}
-											}
-											break;
-										case TraverseMode.NoPassClosedDoors:
-											if (!building_Door.FreePassage)
-											{
-												PfProfilerEndSample();
-												continue;
-											}
-											break;
-									}
-								}
-								else if (pawn != null)
-								{
-									neighCost += building.PathFindCostFor(pawn);
-								}
-								PfProfilerEndSample();
+								int cost = GetPathCostForBuilding(building, traverseParms);
+								if (cost < 0) { continue; }
+								neighCost += cost;
 							}
 							calcGrid[neighIndex].perceivedPathCost = (ushort)neighCost;
 							#endregion
@@ -774,6 +760,58 @@ namespace BetterPathfinding
 			}
 			PfProfilerEndSample();
 			return PawnPath.NotFound;
+		}
+
+		public Func<Pawn, PawnPathCostSettings> GetPawnPathCostSettings = GetPawnPathCostSettingsDefault;
+
+		private static PawnPathCostSettings GetPawnPathCostSettingsDefault(Pawn pawn)
+		{
+			return new PawnPathCostSettings
+			{
+				moveTicksCardinal = pawn?.TicksPerMoveCardinal ?? 13,
+				moveTicksDiagonal = pawn?.TicksPerMoveDiagonal ?? 18,
+				avoidGrid = pawn?.GetAvoidGrid(),
+				area = pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap
+			};
+		}
+
+		public Func<Building, TraverseParms, int> GetPathCostForBuilding = GetPathCostForBuildingDefault;
+
+		private static int GetPathCostForBuildingDefault(Building building, TraverseParms traverseParms)
+		{
+			Building_Door building_Door = building as Building_Door;
+			if (building_Door != null)
+			{
+				switch (traverseParms.mode)
+				{
+					case TraverseMode.ByPawn:
+						if (!traverseParms.canBash && building_Door.IsForbiddenToPass(traverseParms.pawn))
+						{
+							return -1;
+						}
+						if (!building_Door.FreePassage)
+						{
+							if (building_Door.PawnCanOpen(traverseParms.pawn)) { return building_Door.TicksToOpenNow; }
+							else
+							{
+								if (!traverseParms.canBash)
+								{
+									return -1;
+								}
+								return 300;
+							}
+						}
+						break;
+					case TraverseMode.NoPassClosedDoors:
+						if (!building_Door.FreePassage) { return -1; }
+						break;
+				}
+			}
+			else if (traverseParms.pawn != null)
+			{
+				return building.PathFindCostFor(traverseParms.pawn);
+			}
+			return 0;
 		}
 
 		private static char GetBackPointerArrow(int prevX, int prevZ, int curX, int curZ)

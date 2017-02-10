@@ -34,9 +34,11 @@ namespace BetterPathfinding
 				tpCanBash = traverseParms.canBash,
 				tpMoveCardinal = traverseParms.pawn?.TicksPerMoveCardinal ?? -1,
 				tpMoveDiagonal = traverseParms.pawn?.TicksPerMoveDiagonal ?? -1,
-				pathGrid = map.pathGrid.pathGrid.ToList(),
-				fakeEdificeGrid = new ByteGrid(map)
-			};
+				pathGrid = map.pathGrid.pathGrid,
+				fakeEdificeGrid = new ByteGrid(map),
+				avoidGrid = traverseParms.pawn?.GetAvoidGrid(),
+				allowedArea = traverseParms.pawn?.playerSettings?.AreaRestrictionInPawnCurrentMap
+		};
 
 			foreach (var cell in map.AllCells)
 			{
@@ -152,14 +154,14 @@ namespace BetterPathfinding
 
 		public int tpMoveDiagonal;
 
-		//TODO: avoidGrid
+		public ByteGrid avoidGrid;
 
-		//TODO: allowed area
+		public Area allowedArea;
 
 
 		//Map info
 
-		public List<int> pathGrid;
+		public int[] pathGrid;
 
 		public ByteGrid fakeEdificeGrid;
 
@@ -175,8 +177,48 @@ namespace BetterPathfinding
 			Scribe_Values.LookValue(ref tpCanBash, "tpCanBash");
 			Scribe_Values.LookValue(ref tpMoveCardinal, "tpMoveCardinal");
 			Scribe_Values.LookValue(ref tpMoveDiagonal, "tpMoveDiagonal");
-			Scribe_Collections.LookList(ref pathGrid, "pathGrid");
 			Scribe_Deep.LookDeep(ref fakeEdificeGrid, "fakeEdificeGrid");
+			Scribe_Deep.LookDeep(ref avoidGrid, "avoidGrid");
+			Scribe_Deep.LookDeep(ref allowedArea, "allowedArea");
+
+			string compressedString = string.Empty;
+			if (Scribe.mode == LoadSaveMode.Saving)
+			{
+				compressedString = IntArrayToCompressedString(pathGrid);
+			}
+			Scribe_Values.LookValue(ref compressedString, "pathGrid");
+			if (Scribe.mode == LoadSaveMode.LoadingVars)
+			{
+				pathGrid = CompressedStringToIntArray(compressedString);
+			}
+
+		}
+
+		public string IntArrayToCompressedString(int[] array)
+		{
+			var bytes = new byte[array.Length * 4];
+			for (int i = 0; i < array.Length; i++)
+			{
+				var intBytes = BitConverter.GetBytes(array[i]);
+				for (int j = 0; j < 4; j++)
+				{
+					bytes[i * 4 + j] = intBytes[j];
+				}
+			}
+			string str = Convert.ToBase64String(bytes);
+			return ArrayExposeUtility.AddLineBreaksToLongString(str);
+		}
+
+		public int[] CompressedStringToIntArray(string compressedString)
+		{
+			compressedString = ArrayExposeUtility.RemoveLineBreaks(compressedString);
+			byte[] byteGrid = Convert.FromBase64String(compressedString);
+			int[] ints = new int[byteGrid.Length / 4];
+			for (int i = 0; i < ints.Length; i++)
+			{
+				ints[i] = BitConverter.ToInt32(byteGrid, i * 4);
+			}
+			return ints;
 		}
 	}
 }
