@@ -9,7 +9,7 @@ using Verse.AI;
 
 namespace BetterPathfinding
 {
-	public class PathDataDumper : IExposable
+	public class PathDataLog : IExposable
 	{
 		public static void SaveFromPathCall(Map map, IntVec3 startVec, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode)
 		{
@@ -23,7 +23,7 @@ namespace BetterPathfinding
 				destinationRect = CellRect.SingleCell(dest.Cell);
 			}
 
-			var dumper = new PathDataDumper
+			var dumper = new PathDataLog
 			{
 				mapSize = map.Size,
 				start = startVec,
@@ -103,9 +103,9 @@ namespace BetterPathfinding
 
 		}
 
-		public static PathDataDumper LoadFromFile(string filename)
+		public static PathDataLog LoadFromFile(string filename)
 		{
-			var pathData = new PathDataDumper();
+			var pathData = new PathDataLog();
 
 			try
 			{

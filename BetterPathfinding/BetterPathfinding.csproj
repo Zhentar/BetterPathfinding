@@ -54,7 +54,7 @@
     <Compile Include="DetourInjector.cs" />
     <Compile Include="Detours.cs" />
     <Compile Include="NewPathFinder.cs" />
-    <Compile Include="PathDataDumper.cs" />
+    <Compile Include="PathDataLog.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegionLinkDijkstra.cs" />
     <Compile Include="RegionPathCostHeuristic.cs" />

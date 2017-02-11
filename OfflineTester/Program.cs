@@ -21,7 +21,7 @@ namespace OfflineTester
 			Console.WriteLine("-----");
 			foreach (var file in Directory.GetFiles(pathDirectory))
 			{
-				var pathData = PathDataDumper.LoadFromFile(file);
+				var pathData = PathDataLog.LoadFromFile(file);
 
 				var map = MapBuilder.MapFromPathData(pathData);
 				var start = pathData.start;
@@ -41,17 +41,20 @@ namespace OfflineTester
 
 				pf.GetPathCostForBuilding = (building, parms) =>
 				{
-					var fakeEdificeVal = pathData.fakeEdificeGrid[((Building_DoorIndex) building).edificeIndex];
-					switch (fakeEdificeVal)
+					if (building is Building_DoorIndex)
 					{
-						case PathDataDumper.Edifice_KnownArmedTrap:
-							return 800;
-						case PathDataDumper.Edifice_Impassible: //shouldn't happen, but might as well check
-						case PathDataDumper.Edifice_NonTraversableDoor:
-							return -1;
-						default:
-							return fakeEdificeVal;
+						var fakeEdificeVal = pathData.fakeEdificeGrid[((Building_DoorIndex) building).edificeIndex];
+						switch (fakeEdificeVal)
+						{
+							case PathDataLog.Edifice_Impassible: //shouldn't happen, but might as well check
+							case PathDataLog.Edifice_NonTraversableDoor:
+								return -1;
+							default:
+								return fakeEdificeVal;
+						}
 					}
+					if (building is Building_KnownArmedTrap) { return 800; }
+					throw new Exception("Unknown Building");
 				};
 
 				pf.FindPath(start, dest, tp, peMode);

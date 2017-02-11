@@ -260,24 +260,27 @@ namespace BetterPathfinding
 			var sw = new Stopwatch();
 			PawnPath temp = null;
 
-			//sw.Start();
-			//temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
-			//sw.Stop();
-			//Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-			//temp.Dispose();
+			sw.Start();
+			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
+			sw.Stop();
+			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+			temp.Dispose();
 
-			//sw.Reset();
-			//sw.Start();
-			//temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.AdmissableOctile);
-			//sw.Stop();
-			//Log.Message("~~ Admissable Octile ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-			//temp.Dispose();
+			var vanillaPops = debug_openCellsPopped;
+			var vanillaCost = temp.TotalCost;
 
-			//sw.Reset();
-			//sw.Start();
-			//temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
-			//sw.Stop();
-			//Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
+			sw.Reset();
+			sw.Start();
+			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.AdmissableOctile);
+			sw.Stop();
+			Log.Message("~~ Admissable Octile ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+			temp.Dispose();
+
+			sw.Reset();
+			sw.Start();
+			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+			sw.Stop();
+			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
 
 			//var sb = new StringBuilder();
 			//foreach (var pathmax in options)
@@ -327,7 +330,10 @@ namespace BetterPathfinding
 #if DEBUG
 			if (Current.ProgramState == ProgramState.Playing)
 			{
-				if (debug_openCellsPopped > 2500) { PathDataDumper.SaveFromPathCall(this.map, start, dest, traverseParms, peMode); }
+				if (debug_openCellsPopped > 2500 || vanillaCost < result.TotalCost)
+				{
+					PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode);
+				}
 			}
 #endif
 			return result;

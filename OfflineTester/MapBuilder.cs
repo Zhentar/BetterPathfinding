@@ -12,9 +12,7 @@ namespace OfflineTester
 {
 	static class MapBuilder
 	{
-		private static bool isFirstRun = true;
-
-		public static Map MapFromPathData(PathDataDumper data)
+		public static Map MapFromPathData(PathDataLog data)
 		{
 			var map = new Map();
 			Find.Maps.Clear();
@@ -46,19 +44,23 @@ namespace OfflineTester
 
 			for (int i = 0; i < data.fakeEdificeGrid.CellsCount; i++)
 			{
+				Building building = null;
 				switch (data.fakeEdificeGrid[i])
 				{
-					case PathDataDumper.Edifice_Impassible:
-						edificeAry[i] = SetupNewBuilding(new Building(), i);
-						break;
-					case PathDataDumper.Edifice_None:
+					case PathDataLog.Edifice_None:
 						continue;
-					//TODO: handle traps
+					case PathDataLog.Edifice_Impassible:
+						building = new Building();
+						break;
+					case PathDataLog.Edifice_KnownArmedTrap:
+						building = new Building_KnownArmedTrap();
+						break;
 					default:
-						edificeAry[i] = SetupNewBuilding(new Building_DoorIndex(i), i);
-						map.thingGrid.Register(edificeAry[i]);
-						break;	
+						building = new Building_DoorIndex(i);
+						break;
 				}
+				edificeAry[i] = SetupNewBuilding(building, i);
+				map.thingGrid.Register(edificeAry[i]);
 			}
 
 			//Do this here for more consistent profiling times
@@ -75,9 +77,10 @@ namespace OfflineTester
 			building.Map.thingGrid.Register(building);
 			return building;
 		}
-
-		private static Building Impassible = new Building { def = new ThingDef { regionBarrier = true } };
 	}
+
+	public class Building_KnownArmedTrap : Building
+	{ }
 
 	public class Building_DoorIndex : Building_Door
 	{
