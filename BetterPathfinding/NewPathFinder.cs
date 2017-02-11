@@ -279,28 +279,28 @@ namespace BetterPathfinding
 			//sw.Stop();
 			//Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
 
-			var sb = new StringBuilder();
-			foreach (var pathmax in options)
-			{
-				pathmaxEnabled = pathmax;
-				foreach (var weight in options)
-				{
-					weightEnabled = weight;
-					sw.Reset();
-					sw.Start();
-					temp = FindPathInner(start, dest, traverseParms, peMode);
-					sw.Stop();
-					sb.AppendLine($"pathmax: {pathmax}, weight: {weight}, pops: {debug_openCellsPopped}, pathcost: {temp.TotalCost}, elapsed: {sw.ElapsedTicks}");
-					temp.Dispose();
-				}
-			}
-			Log.Message(sb.ToString());
+			//var sb = new StringBuilder();
+			//foreach (var pathmax in options)
+			//{
+			//	pathmaxEnabled = pathmax;
+			//	foreach (var weight in options)
+			//	{
+			//		weightEnabled = weight;
+			//		sw.Reset();
+			//		sw.Start();
+			//		temp = FindPathInner(start, dest, traverseParms, peMode);
+			//		sw.Stop();
+			//		sb.AppendLine($"pathmax: {pathmax}, weight: {weight}, pops: {debug_openCellsPopped}, pathcost: {temp.TotalCost}, elapsed: {sw.ElapsedTicks}");
+			//		temp.Dispose();
+			//	}
+			//}
+			//Log.Message(sb.ToString());
 
 			//Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
 			//Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
 			//Log.Message("\t Closed cells reopened: " + debug_closedCellsReopened);
 
-			temp.Dispose();
+			temp?.Dispose();
 			disableDebugFlash = false;
 #endif
 #if PFPROFILE
@@ -325,7 +325,10 @@ namespace BetterPathfinding
 			Log.Message(profsb.ToString());
 #endif
 #if DEBUG
-			//if (debug_openCellsPopped > 2500) { PathDataDumper.SaveFromPathCall(this.map, start, dest, traverseParms, peMode); }
+			if (Current.ProgramState == ProgramState.Playing)
+			{
+				if (debug_openCellsPopped > 2500) { PathDataDumper.SaveFromPathCall(this.map, start, dest, traverseParms, peMode); }
+			}
 #endif
 			return result;
 		}
@@ -364,8 +367,7 @@ namespace BetterPathfinding
 			}
 			return true;
 		}
-
-
+		
 
 
 		//The standard A* search algorithm has been modified to implement the bidirectional pathmax algorithm
@@ -384,8 +386,6 @@ namespace BetterPathfinding
 			{
 				return PawnPath.NotFound;
 			}
-
-
 			
 			PfProfilerBeginSample(string.Concat("FindPath for ", pawn, " from ", start, " to ", dest, (!dest.HasThing) ? string.Empty : (" at " + dest.Cell)));
 			destinationX = dest.Cell.x;
@@ -445,15 +445,19 @@ namespace BetterPathfinding
 				if (canPassAnything)
 				{
 					//Roughly preserves the Vanilla behavior of increasing path accuracy for shorter paths and slower pawns, though not as smoothly. Only applies to sappers.
-					heuristicStrength = Math.Max(1, (int)Math.Round(heuristicStrength/(float) moveTicksCardinal));
+					heuristicStrength = Math.Max(1, (int) Math.Round(heuristicStrength / (float) moveTicksCardinal));
 				}
 				else
 				{
 					var totalCostEst = regionCost.GetPathCostToRegion(curIndex) + 750; //Add constant cost so it tries harder on short paths
 					regionHeuristicWeightReal[1].x = totalCostEst / 2;
 					regionHeuristicWeightReal[2].x = totalCostEst;
-					regionHeuristicWeight = weightEnabled ? regionHeuristicWeightReal : regionHeuristicWeightNone;
 				}
+				regionHeuristicWeight = weightEnabled ? regionHeuristicWeightReal : regionHeuristicWeightNone;
+			}
+			else
+			{
+				regionHeuristicWeight = regionHeuristicWeightNone;
 			}
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].heuristicCost = 0;
@@ -739,7 +743,7 @@ namespace BetterPathfinding
 						calcGrid[neighIndex].knownCost = neighCostThroughCur;
 						calcGrid[neighIndex].status = statusOpenValue;
 						calcGrid[neighIndex].heuristicCost = nodeH;
-						
+
 						PfProfilerBeginSample("Push Open");
 						openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[curIndex].knownCost
 																		+ (int)Math.Ceiling((nodeH + thisDirEdgeCost)  * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))));
