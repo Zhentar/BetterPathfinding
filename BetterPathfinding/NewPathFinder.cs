@@ -458,7 +458,7 @@ namespace BetterPathfinding
 				}
 				else
 				{
-					var totalCostEst = regionCost.GetPathCostToRegion(curIndex) + 750; //Add constant cost so it tries harder on short paths
+					var totalCostEst = regionCost.GetPathCostToRegion(curIndex) + (moveTicksCardinal * 50); //Add constant cost so it tries harder on short paths
 					regionHeuristicWeightReal[1].x = totalCostEst / 2;
 					regionHeuristicWeightReal[2].x = totalCostEst;
 				}
@@ -726,9 +726,8 @@ namespace BetterPathfinding
 							{
 								if (needsUpdate) //if the heuristic cost was increased for an open node, we need to adjust its spot in the queue
 								{
-									var edgeCost = Math.Max(calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal, 1);
+									var edgeCost = Math.Max(calcGrid[neighIndex].parentX != cellIndices.IndexToCell(neighIndex).x && calcGrid[neighIndex].parentZ != cellIndices.IndexToCell(neighIndex).z ? (int)(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal, 1);
 									openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[neighIndex].knownCost - edgeCost
-																					 + (calcGrid[neighIndex].parentX != cellIndices.IndexToCell(neighIndex).x && calcGrid[neighIndex].parentZ != cellIndices.IndexToCell(neighIndex).z ? diagonalAddedTicks : 0) 
 																					 + (int)Math.Ceiling((edgeCost + nodeH) * regionHeuristicWeight.Evaluate(calcGrid[neighIndex].knownCost))));
 								}
 								continue;
