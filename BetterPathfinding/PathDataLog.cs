@@ -79,6 +79,7 @@ namespace BetterPathfinding
 			}
 			try
 			{
+				SaveGame(savePath);
 				try
 				{
 					Scribe.InitWriting(savePath + ".xml", "PathDataLog");
@@ -129,6 +130,20 @@ namespace BetterPathfinding
 			return pathData;
 		}
 
+		private static void SaveGame(string savePath)
+		{
+			LongEventHandler.QueueLongEvent(() =>
+			{
+				string path = savePath + ".rws";
+				SafeSaver.Save(path, "savegame", delegate
+				{
+					ScribeMetaHeaderUtility.WriteMetaHeader();
+					Game game = Current.Game;
+					Scribe_Deep.LookDeep(ref game, "game");
+				});
+			}, "Saving Path Data", false, null);
+		}
+
 		public const int Edifice_None = 255;
 		public const int Edifice_Impassible = 254;
 		public const int Edifice_NonTraversableDoor = 253;
@@ -136,35 +151,18 @@ namespace BetterPathfinding
 
 
 		public IntVec3 mapSize;
-
 		public IntVec3 start;
-
 		public CellRect dest;
-
 		public PathEndMode peMode;
-
-
 		public TraverseMode tpMode;
-
 		public Danger tpMaxDanger;
-
 		public bool tpCanBash;
-
 		public int tpMoveCardinal;
-
 		public int tpMoveDiagonal;
-
 		public ByteGrid avoidGrid;
-
 		public Area allowedArea;
-
-
-		//Map info
-
 		public int[] pathGrid;
-
 		public ByteGrid fakeEdificeGrid;
-
 
 		public void ExposeData()
 		{
@@ -194,13 +192,13 @@ namespace BetterPathfinding
 
 		}
 
-		public string IntArrayToCompressedString(int[] array)
+		private static string IntArrayToCompressedString(int[] array)
 		{
 			var bytes = new byte[array.Length * 4];
-			for (int i = 0; i < array.Length; i++)
+			for (var i = 0; i < array.Length; i++)
 			{
 				var intBytes = BitConverter.GetBytes(array[i]);
-				for (int j = 0; j < 4; j++)
+				for (var j = 0; j < 4; j++)
 				{
 					bytes[i * 4 + j] = intBytes[j];
 				}
@@ -209,12 +207,12 @@ namespace BetterPathfinding
 			return ArrayExposeUtility.AddLineBreaksToLongString(str);
 		}
 
-		public int[] CompressedStringToIntArray(string compressedString)
+		private static int[] CompressedStringToIntArray(string compressedString)
 		{
 			compressedString = ArrayExposeUtility.RemoveLineBreaks(compressedString);
 			byte[] byteGrid = Convert.FromBase64String(compressedString);
-			int[] ints = new int[byteGrid.Length / 4];
-			for (int i = 0; i < ints.Length; i++)
+			var ints = new int[byteGrid.Length / 4];
+			for (var i = 0; i < ints.Length; i++)
 			{
 				ints[i] = BitConverter.ToInt32(byteGrid, i * 4);
 			}
