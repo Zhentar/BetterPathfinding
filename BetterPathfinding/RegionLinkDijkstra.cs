@@ -51,7 +51,9 @@ namespace BetterPathfinding
 
 		private readonly Map map;
 
-		public static int nodes_popped;
+	    private readonly NewPathFinder.PawnPathCostSettings pathCostSettings;
+
+        public static int nodes_popped;
 
 		private readonly Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
@@ -65,6 +67,7 @@ namespace BetterPathfinding
             this.traverseParms = parms;
             this.targetCell = target;
 			this.rootCell = rootCell;
+		    this.pathCostSettings = pathCosts;
 			avoidGrid = pathCosts.avoidGrid;
 			area = pathCosts.area;
 			nodes_popped = 0;
@@ -235,7 +238,7 @@ namespace BetterPathfinding
 					var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0);
 					if (area != null && !area[index])
 					{
-						cellCost += 600;
+					    cellCost = (cellCost + pathCostSettings.moveTicksCardinal) * 20;
 					}
 					minCost = Math.Min(minCost, cellCost);
 					if (minCost == 0)

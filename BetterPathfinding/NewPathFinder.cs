@@ -50,7 +50,7 @@ namespace BetterPathfinding
 
 			public int heuristicCost;
 
-			public ushort perceivedPathCost;
+			public short perceivedPathCost;
 
 			public ushort parentX;
 
@@ -261,21 +261,21 @@ namespace BetterPathfinding
 			var sw = new Stopwatch();
 			PawnPath temp = null;
 
-			sw.Start();
-			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
-			sw.Stop();
-			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-			var vanillaCost = temp.TotalCost;
-			temp.Dispose();
+            sw.Start();
+            temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
+            sw.Stop();
+            Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+            var vanillaCost = temp.TotalCost;
+            temp.Dispose();
 
-			//sw.Reset();
-			//sw.Start();
-			//temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.AdmissableOctile);
-			//sw.Stop();
-			//Log.Message("~~ Admissable Octile ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-			//temp.Dispose();
+            //sw.Reset();
+            //sw.Start();
+            //temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.AdmissableOctile);
+            //sw.Stop();
+            //Log.Message("~~ Admissable Octile ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+            //temp.Dispose();
 
-			sw.Reset();
+            sw.Reset();
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
@@ -329,11 +329,11 @@ namespace BetterPathfinding
 #if DEBUG
 			if (Current.ProgramState == ProgramState.Playing)
 			{
-				if (debug_openCellsPopped > 5000 || (vanillaCost + 100) < result.TotalCost)
-				{
-					PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode);
-				}
-			}
+                if (debug_openCellsPopped > 5000 || (vanillaCost + 100) < result.TotalCost)
+                {
+                    PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode);
+                }
+            }
 #endif
 			return result;
 		}
@@ -576,14 +576,6 @@ namespace BetterPathfinding
 							{
 								neighCost += pathGridDirect[neighIndex];
 							}
-							if (pawnPathCosts.avoidGrid != null)
-							{
-								neighCost += pawnPathCosts.avoidGrid[neighIndex]*8;
-							}
-							if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
-							{
-								neighCost += 600;
-							}
 							if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(new IntVec3(neighX, 0, neighZ), pawn))
 							{
 								neighCost += 800;
@@ -594,8 +586,16 @@ namespace BetterPathfinding
 								int cost = GetPathCostForBuilding(building, traverseParms);
 								if (cost < 0) { continue; }
 								neighCost += cost;
-							}
-							calcGrid[neighIndex].perceivedPathCost = (ushort)neighCost;
+                            }
+                            if (pawnPathCosts.avoidGrid != null)
+                            {
+                                neighCost += pawnPathCosts.avoidGrid[neighIndex] * 8;
+                            }
+                            if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
+                            {
+                                neighCost = (neighCost + moveTicksCardinal)*20;
+                            }
+                            calcGrid[neighIndex].perceivedPathCost = (short)Math.Min(neighCost, 9999);
 							#endregion
 #if DEBUG
 							calcGrid[neighIndex].timesPopped = 0;
