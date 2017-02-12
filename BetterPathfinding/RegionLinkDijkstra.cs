@@ -108,31 +108,15 @@ namespace BetterPathfinding
 					//I've never encountered this during testing, but users reported issues resolved by this check.
 	                if (destRegion?.valid != true) { continue; }
 
+                    int portalCost = 0;
 					if (destRegion.portal != null)
-					{
-						//Not using Region.Allows because it is not entirely consistent with the pathfinder logic
-						//Resulting in errors when a door is within range of 22 turrets
-						switch (traverseParms.mode)
-						{
-							case TraverseMode.ByPawn:
-								if (!traverseParms.canBash && destRegion.portal.IsForbiddenToPass(traverseParms.pawn))
-								{
-									continue;
-								}
-								if (!destRegion.portal.FreePassage && !destRegion.portal.PawnCanOpen(traverseParms.pawn) &&
-									!traverseParms.canBash)
-								{
-									continue;
-								}
-								break;
-							case TraverseMode.NoPassClosedDoors:
-								if (!destRegion.portal.FreePassage)
-								{
-									continue;
-								}
-								break;
-						}
-					}
+                    {
+                        //Not using Region.Allows because it is not entirely consistent with the pathfinder logic
+                        //Resulting in errors when a door is within range of 22 turrets
+                        portalCost = NewPathFinder.GetPathCostForBuilding(destRegion.portal, traverseParms);
+                        if(portalCost < 0 ) { continue; }
+                        portalCost = portalCost + costCalculator(1, 0);
+                    }
 
 
 
@@ -140,7 +124,7 @@ namespace BetterPathfinding
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
-						var addedCost = destRegion.portal != null ? GetPortalCost(destRegion.portal) : RegionLinkDistance(vertex.Link, current2, minPathCost);
+						var addedCost = destRegion.portal != null ? portalCost : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						addedCost = Math.Max(addedCost, 1); //Handle mods with negative path costs
 						int newCost = knownBest + addedCost;
                         int pathCost = RegionLinkDistance(targetCell, current2, costCalculator, 0) + newCost;
@@ -264,11 +248,6 @@ namespace BetterPathfinding
 			minPathCosts[region] = minCost;
 
 			return minCost;
-		}
-
-		private int GetPortalCost(Building_Door portal)
-		{
-			return portal.TicksToOpenNow + costCalculator(1,0);
 		}
 
 		private int RegionLinkDistance(RegionLink a, RegionLink b, int minPathCost)

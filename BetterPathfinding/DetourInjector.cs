@@ -46,12 +46,12 @@ namespace BetterPathfinding
 			if (!Detours.TryDetourFromTo(RimWorld_PathFinder_FindPath, ModTest_PathFinder_FindPath))
 				return false;
 
-
-			var assembly = typeof(GameInitData).Assembly;
+#if DEBUG
+            var assembly = typeof(GameInitData).Assembly;
 			var debugCellType = assembly.GetType("Verse.DebugCell");
 			if (!DoDetour(debugCellType, typeof(DebugCell), "OnGUI")) return false;
-
-			return true;
+#endif
+            return true;
 		}
 
 

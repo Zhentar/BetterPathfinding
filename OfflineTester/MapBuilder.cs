@@ -50,7 +50,7 @@ namespace OfflineTester
 					case PathDataLog.Edifice_None:
 						continue;
 					case PathDataLog.Edifice_Impassible:
-						building = new Building();
+						building = new Building() { def = new ThingDef { regionBarrier = true } };
 						break;
 					case PathDataLog.Edifice_KnownArmedTrap:
 						building = new Building_KnownArmedTrap();
@@ -63,21 +63,21 @@ namespace OfflineTester
 				map.thingGrid.Register(edificeAry[i]);
 			}
 
-			//Do this here for more consistent profiling times
-			map.regionAndRoomUpdater.RebuildDirtyRegionsAndRooms();
+            //Do this here for more consistent profiling times
+            map.regionAndRoomUpdater.RebuildDirtyRegionsAndRooms();
 
 			return map;
 		}
 
 		private static Building SetupNewBuilding(Building building, int index)
 		{
-			building.def = new ThingDef { regionBarrier = true };
 			building.Position = Find.Maps[0].cellIndices.IndexToCell(index);
 			Building_DoorIndex.mapIndexOrStateInfo.SetValue(building, (sbyte)0);
 			building.Map.thingGrid.Register(building);
 			return building;
 		}
-	}
+
+    }
 
 	public class Building_KnownArmedTrap : Building
 	{ }
@@ -97,6 +97,8 @@ namespace OfflineTester
 		public Building_DoorIndex(int index)
 		{
 			edificeIndex = index;
-		}
+            def = new ThingDef { regionBarrier = true, thingClass = typeof(Building_DoorIndex) };
+
+        }
 	}
 }
