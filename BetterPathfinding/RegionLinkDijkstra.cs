@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace BetterPathfinding
@@ -32,15 +33,15 @@ namespace BetterPathfinding
 				return a.EstimatedPathCost.CompareTo(b.EstimatedPathCost);
 			}
 		}
-
+        
 		private readonly Dictionary<int, RegionLink> regionMinLink = new Dictionary<int, RegionLink>();
 
 		private readonly Dictionary<RegionLink, int> distances = new Dictionary<RegionLink, int>();
 
+	    private readonly Dictionary<RegionLink, IntVec3> linkTargetCells = new Dictionary<RegionLink, IntVec3>();
+
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
-
-		private readonly Func<int, int, int> costCalculator;
-
+		
         private TraverseParms traverseParms;
 
         private readonly IntVec3 targetCell;
@@ -60,10 +61,9 @@ namespace BetterPathfinding
 		//private NewPathFinder debugPathfinder;
 		public IntVec3 rootCell;
 
-		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts, Func<int, int, int> cost)
+		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts)
 		{
 			this.map = map;
-			this.costCalculator = cost;
             this.traverseParms = parms;
             this.targetCell = target;
 			this.rootCell = rootCell;
@@ -82,11 +82,18 @@ namespace BetterPathfinding
 				var minPathCost = RegionMinimumPathCost(region);
 				foreach (RegionLink current in region.links) 
 				{
-					var dist = RegionLinkDistance(rootCell, current, cost, minPathCost);
+					var dist = RegionLinkDistance(rootCell, current, minPathCost);
 					if (distances.ContainsKey(current))
 					{
-						 dist = Math.Min(distances[current], dist);
+						if (dist < distances[current])
+						{
+							linkTargetCells[current] = GetLinkTargetCell(rootCell, current);
+						}
+						dist = Math.Min(distances[current], dist);
+						//TODO: handle link target cell here
 					}
+					else
+					{ linkTargetCells[current] = GetLinkTargetCell(rootCell, current); }
 					distances[current] = dist;
 					queue.Push(new RegionLinkQueueEntry(region, current, dist, dist));
 				}
@@ -118,10 +125,8 @@ namespace BetterPathfinding
                         //Resulting in errors when a door is within range of 22 turrets
                         portalCost = NewPathFinder.GetPathCostForBuilding(destRegion.portal, traverseParms);
                         if(portalCost < 0 ) { continue; }
-                        portalCost = portalCost + costCalculator(1, 0);
+                        portalCost = portalCost + OctileDistance(1, 0);
                     }
-
-
 
 					var minPathCost = RegionMinimumPathCost(destRegion);
 					foreach (var current2 in destRegion.links)
@@ -130,7 +135,7 @@ namespace BetterPathfinding
 						var addedCost = destRegion.portal != null ? portalCost : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						addedCost = Math.Max(addedCost, 1); //Handle mods with negative path costs
 						int newCost = knownBest + addedCost;
-                        int pathCost = RegionLinkDistance(targetCell, current2, costCalculator, 0) + newCost;
+                        int pathCost = RegionLinkDistance(targetCell, current2, 0) + newCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
 						{
@@ -148,19 +153,19 @@ namespace BetterPathfinding
 					}
 					//if this is the first vertex popped for the region, we've found the shortest path to that region
 					if (!regionMinLink.ContainsKey(destRegion.id)) {
-						//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
-						//{
-						//	NewPathFinder.disableDebugFlash = true;
-						//	var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
-						//	NewPathFinder.disableDebugFlash = false;
-						//	var actualCost = tempPath.TotalCost;
-						//	tempPath.Dispose();
-						//	if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
-						//		NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
-						//	NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest/1500f, knownBest + "\n(" + actualCost + ")");
-						//	if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
-						//}
-						regionMinLink[destRegion.id] = vertex.Link;
+                        //if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+                        //{
+                        //    //NewPathFinder.disableDebugFlash = true;
+                        //    //var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
+                        //    //NewPathFinder.disableDebugFlash = false;
+                        //    //var actualCost = tempPath.TotalCost;
+                        //    //tempPath.Dispose();
+                        //    if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
+                        //        NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
+                        //    NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest / 1500f, $"{knownBest}\n{nodes_popped}" /*+ "\n(" + actualCost + ")"*/);
+                        //    //if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
+                        //}
+                        regionMinLink[destRegion.id] = vertex.Link;
 						if (destRegion.id == region.id) {
 							minLink = vertex.Link;
 							return vertex.Cost;
@@ -173,15 +178,12 @@ namespace BetterPathfinding
 		}
 
 
-		public int GetRegionSecondBestDistance(Region region, out RegionLink secondBestLink)
+		public int GetRegionBestDistances(Region region, out RegionLink bestLink, out RegionLink secondBestLink, out int secondBestCost)
 		{
-			RegionLink bestLink;
-			GetRegionDistance(region, out bestLink);
-
-			//var secondBest = region.links.Where(l => l != bestLink).Min(new LinkDistanceComparer(distances));
+			int bestCost = GetRegionDistance(region, out bestLink);
 
 			secondBestLink = null;
-			int secondBestCost = Int32.MaxValue;
+			secondBestCost = Int32.MaxValue;
 
 			foreach (var link in region.links)
 			{
@@ -198,7 +200,7 @@ namespace BetterPathfinding
 				}
 			}
 
-			return secondBestCost;
+			return bestCost;
 		}
 
 		private class LinkDistanceComparer : IComparer<RegionLink>
@@ -255,10 +257,13 @@ namespace BetterPathfinding
 
 		private int RegionLinkDistance(RegionLink a, RegionLink b, int minPathCost)
 		{
-			int dx = Math.Abs(SpanCenterX(a.span) - SpanCenterX(b.span));
-			int dz = Math.Abs(SpanCenterZ(a.span) - SpanCenterZ(b.span));
+		    var aCell = linkTargetCells.ContainsKey(a) ? linkTargetCells[a] : RegionLinkCenter(a);
+            var bCell = linkTargetCells.ContainsKey(b) ? linkTargetCells[b] : RegionLinkCenter(b);
+            var diff = aCell - bCell;
+            var dx = Math.Abs(diff.x);
+            var dz = Math.Abs(diff.z);
 
-			return costCalculator(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
 		}
 
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
@@ -279,24 +284,47 @@ namespace BetterPathfinding
 			return cost(dx, dz) + minPathCost * Math.Max(dx, dz);
 		}
 
-		public static int RegionLinkDistance(IntVec3 cell, RegionLink link, Func<int, int, int> cost, int minPathCost)
-        {
-            int dx, dz;
-            if (link.span.dir == SpanDirection.North)
-            {
-                dx = Math.Abs(cell.x - link.span.root.x);
-                dz = GetValue(cell.z, link.span.root.z, link.span.length);
-            }
-            else
-            {
-                dz = Math.Abs(cell.z - link.span.root.z);
-                dx = GetValue(cell.x, link.span.root.x, link.span.length);
-            }
-            return cost(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+		public int RegionLinkDistance(IntVec3 cell, RegionLink link, int minPathCost)
+		{
+		    var targetCell = GetLinkTargetCell(cell, link);
+
+		    var diff = cell - targetCell;
+		    var dx = Math.Abs(diff.x);
+            var dz = Math.Abs(diff.z);
+
+            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
         }
 
-        private static int GetValue(int cellz, int spanz, int spanLen) => cellz < spanz ? spanz - cellz : Math.Max(cellz - (spanz + spanLen), 0);
+		private int OctileDistance(int dx, int dz) => (pathCostSettings.moveTicksCardinal * (dx + dz) + (pathCostSettings.moveTicksDiagonal - 2 * pathCostSettings.moveTicksCardinal) * Math.Min(dx, dz));
 
-        private static Region GetLinkOtherRegion(Region fromRegion, RegionLink link) =>  Equals(fromRegion, link.RegionA) ? link.RegionB : link.RegionA;
+		private static IntVec3 GetLinkTargetCell(IntVec3 cell, RegionLink link)
+	    {
+	        int width = 0;
+	        int height = 0;
+	        if (link.span.dir == SpanDirection.North) { height = link.span.length - 1; }
+	        else
+	        { width = link.span.length - 1; }
+
+	        IntVec3 targetCell = new IntVec3(Mathf.Clamp(cell.x, link.span.root.x, link.span.root.x + width), 0, Mathf.Clamp(cell.z, link.span.root.z, link.span.root.z + height));
+
+            var diff = cell - targetCell;
+            var dx = Math.Abs(diff.x);
+            var dz = Math.Abs(diff.z);
+
+            var dist = link.span.dir == SpanDirection.North ? dx : dz;
+	        var factor = Math.Min(6, dist) / 6.0;
+	        IntVec3 centerCell = RegionLinkCenter(link);
+
+	        targetCell = IntVec3Lerp(targetCell, centerCell, factor);
+
+            return targetCell;
+	    }
+
+	    private static IntVec3 IntVec3Lerp(IntVec3 cellA, IntVec3 cellB, double factor)
+	    {
+	        return new IntVec3((int) Math.Round(cellA.x + (cellB.x - cellA.x) * factor), 0, (int) Math.Round(cellA.z + (cellB.z - cellA.z) * factor));
+	    }
+
+	    private static Region GetLinkOtherRegion(Region fromRegion, RegionLink link) =>  Equals(fromRegion, link.RegionA) ? link.RegionB : link.RegionA;
     }
 }

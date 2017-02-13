@@ -50,7 +50,7 @@ namespace OfflineTester
 					case PathDataLog.Edifice_None:
 						continue;
 					case PathDataLog.Edifice_Impassible:
-						building = new Building() { def = new ThingDef { regionBarrier = true } };
+						building = new Building() { def = impassible };
 						break;
 					case PathDataLog.Edifice_KnownArmedTrap:
 						building = new Building_KnownArmedTrap();
@@ -77,28 +77,25 @@ namespace OfflineTester
 			return building;
 		}
 
-    }
+		private static readonly ThingDef impassible = new ThingDef { regionBarrier = true };
+	}
+
 
 	public class Building_KnownArmedTrap : Building
 	{ }
 
 	public class Building_DoorIndex : Building_Door
 	{
-
-		private static readonly Func<Thing, sbyte> mapIndexOrStateGet = Utils.GetFieldAccessor<Thing, sbyte>("mapIndexOrState");
-
 		public static readonly FieldInfo mapIndexOrStateInfo = typeof(Thing).GetField("mapIndexOrState", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetField);
-
-		private sbyte mapIndexOrState { get { return mapIndexOrStateGet(this); } set { mapIndexOrStateInfo.SetValue(this, value); } }
-
 
 		public readonly int edificeIndex;
 
 		public Building_DoorIndex(int index)
 		{
 			edificeIndex = index;
-            def = new ThingDef { regionBarrier = true, thingClass = typeof(Building_DoorIndex) };
-
+            def = doorDef;
         }
+
+		private static readonly ThingDef doorDef = new ThingDef {regionBarrier = true, thingClass = typeof(Building_DoorIndex)};
 	}
 }

@@ -164,8 +164,6 @@ namespace BetterPathfinding
 
 		private int neighCostThroughCur;
 
-		private int neighCost;
-
 		private int h;
 
 		private int closedCellCount;
@@ -260,12 +258,13 @@ namespace BetterPathfinding
 			disableDebugFlash = true; //disable debug flash during timing tests
 			var sw = new Stopwatch();
 			PawnPath temp = null;
+		    var vanillaCost = Int32.MaxValue- 1000;
 
             sw.Start();
             temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
             sw.Stop();
             Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
-            var vanillaCost = temp.TotalCost;
+            vanillaCost = temp.TotalCost;
             temp.Dispose();
 
             //sw.Reset();
@@ -276,14 +275,14 @@ namespace BetterPathfinding
             //temp.Dispose();
 
             sw.Reset();
-			sw.Start();
-			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
-			sw.Stop();
-			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" + sw.ElapsedMilliseconds + "ms)");
+            sw.Start();
+            temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+            sw.Stop();
+            Log.Message("~~ Better ~~ " + /*sw.ElapsedTicks + " ticks, " +*/ debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
 
-			//var sb = new StringBuilder();
-			//foreach (var pathmax in options)
-			//{
+            //var sb = new StringBuilder();
+            //foreach (var pathmax in options)
+            //{
 			//	pathmaxEnabled = pathmax;
 			//	foreach (var weight in options)
 			//	{
@@ -296,13 +295,13 @@ namespace BetterPathfinding
 			//		temp.Dispose();
 			//	}
 			//}
-			//Log.Message(sb.ToString());
+            //Log.Message(sb.ToString());
 
-			//Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
-			//Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
-			//Log.Message("\t Closed cells reopened: " + debug_closedCellsReopened);
+            //Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
+            //Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
+            //Log.Message("\t Closed cells reopened: " + debug_closedCellsReopened);
 
-			temp?.Dispose();
+            temp?.Dispose();
 			disableDebugFlash = false;
 #endif
 #if PFPROFILE
@@ -545,57 +544,37 @@ namespace BetterPathfinding
 					for (int i = 0; i < 8; i++)
 					{
 						neighIndexes[i] = -1;
-						neighX = (ushort) (curX + Directions[i]);
-						neighZ = (ushort) (curZ + Directions[i + 8]);
-						if (neighX >= mapSizeX || neighZ >= mapSizeZ) { continue; }
+
+                        neighX = (ushort)(curX + Directions[i]);
+                        neighZ = (ushort)(curZ + Directions[i + 8]);
+                        if (neighX >= mapSizeX || neighZ >= mapSizeZ) { continue; }
+
+                        switch (i)
+                        {
+                            case 4:
+                                if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue; }
+                                break;
+                            case 5:
+                                if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue; }
+                                break;
+                            case 6:
+                                if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
+                                break;
+                            case 7:
+                                if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
+                                break;
+                        }
+
 						neighIndex = cellIndices.CellToIndex(neighX, neighZ);
+
 						if ((calcGrid[neighIndex].status != statusClosedValue) && (calcGrid[neighIndex].status != statusOpenValue))
 						{
 							#region edge cost
-							calcGrid[neighIndex].perceivedPathCost = 10000;
-							neighCost = 0;
-							bool notWalkable = false;
-							if (!pathGrid.WalkableFast(neighX, neighZ))
-							{
-								if (!canPassAnything)
-								{
-									//DebugFlash(intVec, 0.22f, "walk");
-									continue;
-								}
-								notWalkable = true;
-								neighCost += 60;
-								Thing edifice = edificeGrid[neighIndex];
-								if (edifice == null || !edifice.def.useHitPoints)
-								{
-									continue;
-								}
-								neighCost += (int) (edifice.HitPoints*0.1f);
-							}
-							
-							if (!notWalkable)
-							{
-								neighCost += pathGridDirect[neighIndex];
-							}
-							if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(new IntVec3(neighX, 0, neighZ), pawn))
-							{
-								neighCost += 800;
-							}
-							Building building = edificeGrid[neighIndex];
-							if (building != null)
-							{
-								int cost = GetPathCostForBuilding(building, traverseParms);
-								if (cost < 0) { continue; }
-								neighCost += cost;
-                            }
-                            if (pawnPathCosts.avoidGrid != null)
-                            {
-                                neighCost += pawnPathCosts.avoidGrid[neighIndex] * 8;
-                            }
-                            if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
-                            {
-                                neighCost = (neighCost + moveTicksCardinal)*20;
-                            }
-                            calcGrid[neighIndex].perceivedPathCost = (short)Math.Min(neighCost, 9999);
+
+						    if (10000 <= (calcGrid[neighIndex].perceivedPathCost = GetTotalPerceivedPathCost(traverseParms, canPassAnything, shouldCollideWithPawns, pawn, pawnPathCosts)))
+						    {
+                                continue;
+						    }
 							#endregion
 #if DEBUG
 							calcGrid[neighIndex].timesPopped = 0;
@@ -633,21 +612,6 @@ namespace BetterPathfinding
 							#endregion
 						}
 
-						switch (i)
-						{
-							case 4:
-								if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue;}
-								break;
-							case 5:
-								if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue; }
-								break;
-							case 6:
-								if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
-								break;
-							case 7:
-								if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
-								break;
-						}
 
 						if (calcGrid[neighIndex].perceivedPathCost < 10000)
 						{
@@ -774,7 +738,48 @@ namespace BetterPathfinding
 			return PawnPath.NotFound;
 		}
 
-		public static Func<Pawn, PawnPathCostSettings> GetPawnPathCostSettings = GetPawnPathCostSettingsDefault;
+	    private short GetTotalPerceivedPathCost(TraverseParms traverseParms, bool canPassAnything, bool shouldCollideWithPawns, Pawn pawn, PawnPathCostSettings pawnPathCosts)
+	    {
+	        int neighCost = 0;
+		    if (!pathGrid.WalkableFast(neighX, neighZ))
+		    {
+			    if (!canPassAnything)
+			    {
+				    //DebugFlash(intVec, 0.22f, "walk");
+				    return 10000;
+			    }
+			    neighCost += 60;
+			    Thing edifice = edificeGrid[neighIndex];
+			    if (edifice == null || !edifice.def.useHitPoints) { return 10000; }
+			    neighCost += (int) (edifice.HitPoints * 0.1f);
+		    }
+		    else
+		    {
+			    neighCost += pathGridDirect[neighIndex];
+		    }
+	        if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(new IntVec3(neighX, 0, neighZ), pawn))
+	        {
+	            neighCost += 800;
+	        }
+	        Building building = edificeGrid[neighIndex];
+	        if (building != null)
+	        {
+	            int cost = GetPathCostForBuilding(building, traverseParms);
+	            if (cost < 0) { return 10000; }
+	            neighCost += cost;
+	        }
+	        if (pawnPathCosts.avoidGrid != null)
+	        {
+	            neighCost += pawnPathCosts.avoidGrid[neighIndex] * 8;
+	        }
+	        if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
+	        {
+	            neighCost = (neighCost + moveTicksCardinal) * 20;
+	        }
+	        return (short)Math.Min(neighCost, 9999);
+	    }
+
+	    public static Func<Pawn, PawnPathCostSettings> GetPawnPathCostSettings = GetPawnPathCostSettingsDefault;
 
 		private static PawnPathCostSettings GetPawnPathCostSettingsDefault(Pawn pawn)
 		{

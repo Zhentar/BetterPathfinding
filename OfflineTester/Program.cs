@@ -19,25 +19,32 @@ namespace OfflineTester
 		{
 			InitGameData();
 			Console.WriteLine("-----");
-			foreach (var file in Directory.GetFiles(pathDirectory,"*.xml"))
-			{
+		    var sw = new Stopwatch();
+            foreach (var file in Directory.GetFiles(pathDirectory,"*.xml"))
+		    //var file = Path.Combine(pathDirectory, "Darcie - 1215368.xml");
+            {
+                GC.Collect();
 				Console.WriteLine(Path.GetFileNameWithoutExtension(file));
-				var pathData = PathDataLog.LoadFromFile(file);
 
-				var map = MapBuilder.MapFromPathData(pathData);
-				var start = pathData.start;
-				var dest = new LocalTargetInfo(pathData.dest.CenterCell);
+                var pathData = PathDataLog.LoadFromFile(file);
+
+                var pf = new NewPathFinder(MapBuilder.MapFromPathData(pathData));
+                var dest = new LocalTargetInfo(pathData.dest.CenterCell);
 				var tp = new TraverseParms() {canBash = pathData.tpCanBash, maxDanger = pathData.tpMaxDanger, mode = pathData.tpMode};
-				var peMode = pathData.peMode;
-
-				var pf = new NewPathFinder(map);
 
 				SetPathfinderDelegates(pf, pathData);
 
-				pf.FindPath(start, dest, tp, peMode);
+                sw.Start();
+                //for (int i = 0; i < 4; i++)
+                {
+                    var path = pf.FindPath(pathData.start, dest, tp, pathData.peMode);
+                    path.Dispose();
+                }
+                sw.Stop();
 				Console.WriteLine();
 			}
 			//Console.WriteLine($"pathmax: {true}, weight: {true}, pops: {pf.debug_openCellsPopped}, pathcost: {path.TotalCost}, elapsed: {sw.ElapsedTicks}");
+		    Console.WriteLine($"\nAll Done!\nElapsed pathfinding time: {sw.ElapsedMilliseconds}ms");
 			Console.Read();
 		}
 
@@ -103,21 +110,20 @@ namespace OfflineTester
 
 		//static void SetupOfflineTestDll(ModuleDefinition module)
 		//{
-		//  //Redirect log calls to the console
+		//	var type = module.GetType("Verse.ShaderDatabase");
+		//	{
+		//		var method = type.Methods.First(m => m.Name == "LoadShader");
+		//		ReplaceWithReturnNull(method);
+		//	}
 		//	type = module.GetType("Verse.Log");
 		//	var logMethod = module.ImportReference(typeof(Console).GetMethod("WriteLine", new[] { typeof(string) }));
 		//	foreach (var meth in type.Methods.Where(m => m.Parameters.Count == 1 && m.Parameters[0].Name == "text"))
 		//	{
 		//		var ilProc = meth.Body.GetILProcessor();
 		//		ilProc.Body.Instructions.Clear();
-		//		ilProc.Append(ilProc.Create(OpCodes.Ldarg_0));
-		//		ilProc.Append(ilProc.Create(OpCodes.Call, logMethod));
-		//	}
-
-		//	var type = module.GetType("Verse.ShaderDatabase");
-		//	{
-		//		var method = type.Methods.First(m => m.Name == "LoadShader");
-		//		ReplaceWithReturnNull(method);
+		//		ilProc.Emit(OpCodes.Ldarg_0);
+		//		ilProc.Emit(OpCodes.Call, logMethod);
+		//		ilProc.Emit(OpCodes.Ret);
 		//	}
 		//	type = module.GetType("Verse.MaterialPool");
 		//	foreach (var meth in type.Methods) { ReplaceWithReturnNull(meth); }
@@ -125,15 +131,19 @@ namespace OfflineTester
 		//	type = module.GetType("Verse.SolidColorMaterials");
 		//	foreach (var meth in type.Methods) { ReplaceWithReturnNull(meth); }
 
-		//  //This doesn't directly call any Unity code, but it adds a lot of game state dependencies, some of which do call Unity
 		//	type = module.GetType("Verse.MapTemperature");
 		//	foreach (var meth in type.Methods.Where(m => m.Name == "CalculateOutdoorTemperatureAtTile"))
 		//	{
 		//		var ilProc = meth.Body.GetILProcessor();
 		//		ilProc.Body.Instructions.Clear();
-		//		ilProc.Append(ilProc.Create(OpCodes.Ldc_R4, 0f));
-		//		ilProc.Append(ilProc.Create(OpCodes.Ret));
+		//		ilProc.Emit(OpCodes.Ldc_R4, 0f);
+		//		ilProc.Emit(OpCodes.Ret);
 		//	}
+
+		//	//This works fine with .NET 3.5 (it errors gracefully), but with newer runtimes it throws an invalid program exception
+		//	//So we'll null it out so we can use the latest & greatest profiling & debugging features
+		//	type = module.GetType("Verse.ContentFinder`1");
+		//	ReplaceWithGenericReturnNull(type.Methods.First(m => m.Name == "Get"));
 
 		//}
 
@@ -141,8 +151,20 @@ namespace OfflineTester
 		//{
 		//	var ilProc = method.Body.GetILProcessor();
 		//	ilProc.Body.Instructions.Clear();
-		//	ilProc.Append(ilProc.Create(OpCodes.Ldnull));
-		//	ilProc.Append(ilProc.Create(OpCodes.Ret));
+		//	ilProc.Body.ExceptionHandlers.Clear();
+		//	ilProc.Emit(OpCodes.Ldnull);
+		//	ilProc.Emit(OpCodes.Ret);
+		//}
+
+		//static void ReplaceWithGenericReturnNull(MethodDefinition method)
+		//{
+		//	var ilProc = method.Body.GetILProcessor();
+		//	ilProc.Body.Instructions.Clear();
+		//	ilProc.Body.ExceptionHandlers.Clear();
+		//	ilProc.Emit(OpCodes.Ldloca_S, method.Body.Variables[0]);
+		//	ilProc.Emit(OpCodes.Initobj, method.Body.Variables[0].VariableType);
+		//	ilProc.Emit(OpCodes.Ldloc_0);
+		//	ilProc.Emit(OpCodes.Ret);
 		//}
 	}
 }

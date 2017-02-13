@@ -63,15 +63,14 @@ namespace BetterPathfinding
 			if (distanceBuilder == null)
 			{
 				NewPathFinder.PfProfilerBeginSample("Distance Map Init");
-				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, pathCosts, OctileDistance);
+				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, pathCosts);
 				NewPathFinder.PfProfilerEndSample();
 			}
 
 			if (region.id != lastRegionId) //Cache the most recently retrieved region, since fetches will tend to be clustered.
 			{
 				NewPathFinder.PfProfilerBeginSample("Get Region Distance"); 
-				bestLinkCost = distanceBuilder.GetRegionDistance(region, out bestLink);
-				secondBestLinkCost = distanceBuilder.GetRegionSecondBestDistance(region, out secondBestLink);
+                bestLinkCost = distanceBuilder.GetRegionBestDistances(region, out bestLink, out secondBestLink, out secondBestLinkCost);
 				lastRegionTilePathCost = distanceBuilder.RegionMinimumPathCost(region);
 				NewPathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
@@ -79,10 +78,10 @@ namespace BetterPathfinding
 
 			if (bestLink != null)
 			{
-				var costToLink = RegionLinkDijkstra.RegionLinkDistance(cell, bestLink, OctileDistance, lastRegionTilePathCost);
+				var costToLink = distanceBuilder.RegionLinkDistance(cell, bestLink, lastRegionTilePathCost);
 				if (secondBestLink != null)
 				{
-					var costToSecondLink = RegionLinkDijkstra.RegionLinkDistance(cell, secondBestLink, OctileDistance, lastRegionTilePathCost);
+					var costToSecondLink = distanceBuilder.RegionLinkDistance(cell, secondBestLink, lastRegionTilePathCost);
 					return Math.Min(secondBestLinkCost + costToSecondLink, bestLinkCost + costToLink);
 				}
 				return bestLinkCost + costToLink;
