@@ -79,7 +79,7 @@ namespace BetterPathfinding
 
 			foreach (var region in startingRegions)
 			{
-				var minPathCost = RegionMinimumPathCost(region);
+				var minPathCost = RegionMedianPathCost(region);
 				foreach (RegionLink current in region.links) 
 				{
 					var dist = RegionLinkDistance(rootCell, current, minPathCost);
@@ -90,7 +90,6 @@ namespace BetterPathfinding
 							linkTargetCells[current] = GetLinkTargetCell(rootCell, current);
 						}
 						dist = Math.Min(distances[current], dist);
-						//TODO: handle link target cell here
 					}
 					else
 					{ linkTargetCells[current] = GetLinkTargetCell(rootCell, current); }
@@ -128,7 +127,7 @@ namespace BetterPathfinding
                         portalCost = portalCost + OctileDistance(1, 0);
                     }
 
-					var minPathCost = RegionMinimumPathCost(destRegion);
+					var minPathCost = RegionMedianPathCost(destRegion);
 					foreach (var current2 in destRegion.links)
 					{
 						if (current2 == vertex.Link) { continue; }
@@ -153,19 +152,19 @@ namespace BetterPathfinding
 					}
 					//if this is the first vertex popped for the region, we've found the shortest path to that region
 					if (!regionMinLink.ContainsKey(destRegion.id)) {
-                        //if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
-                        //{
-                        //    //NewPathFinder.disableDebugFlash = true;
-                        //    //var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
-                        //    //NewPathFinder.disableDebugFlash = false;
-                        //    //var actualCost = tempPath.TotalCost;
-                        //    //tempPath.Dispose();
-                        //    if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
-                        //        NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
-                        //    NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest / 1500f, $"{knownBest}\n{nodes_popped}" /*+ "\n(" + actualCost + ")"*/);
-                        //    //if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
-                        //}
-                        regionMinLink[destRegion.id] = vertex.Link;
+						//if (DebugViewSettings.drawPaths && !NewPathFinder.disableDebugFlash)
+						//{
+						//	//NewPathFinder.disableDebugFlash = true;
+						//	//var tempPath = debugPathfinder?.FindPathInner(this.rootCell, new LocalTargetInfo(RegionLinkCenter(vertex.Link)), this.traverseParms, Verse.AI.PathEndMode.OnCell);
+						//	//NewPathFinder.disableDebugFlash = false;
+						//	//var actualCost = tempPath.TotalCost;
+						//	//tempPath.Dispose();
+						//	if (regionMinLink.TryGetValue(vertex.FromRegion.id, out minLink))
+						//		NewPathFinder.DebugLine(this.map, RegionLinkCenter(vertex.Link), RegionLinkCenter(minLink));
+						//	NewPathFinder.DebugFlash(this.map, RegionLinkCenter(vertex.Link), knownBest / 1500f, $"{knownBest}\n{nodes_popped}" /*+ "\n(" + actualCost + ")"*/);
+						//	//if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
+						//}
+						regionMinLink[destRegion.id] = vertex.Link;
 						if (destRegion.id == region.id) {
 							minLink = vertex.Link;
 							return vertex.Cost;
@@ -203,56 +202,43 @@ namespace BetterPathfinding
 			return bestCost;
 		}
 
-		private class LinkDistanceComparer : IComparer<RegionLink>
-		{
-			private Dictionary<RegionLink, int> distances;
 
-			public LinkDistanceComparer(Dictionary<RegionLink, int> distanceDict)
-			{
-				distances = distanceDict;
-			}
-
-			public int Compare(RegionLink a, RegionLink b)
-			{
-				var aDist = distances.ContainsKey(a) ? distances[a] : int.MaxValue;
-				var bDist = distances.ContainsKey(b) ? distances[b] : int.MaxValue;
-
-				return  aDist.CompareTo(bDist);
-			}
-		}
 		//If we just use the pawn move speed as the path cost, we're effectively telling A* "there might be a road around here somewhere, keep looking!"
 		//This makes it expand a whole lot more nodes than necessary in open, rough terrain, searching high and low for that alleged road.
 		//Finding the minimum path cost of any tile in the region is a cheap way to guess if that road could possibly exist.
 		//This could be cached across pathfinding calls, but I'd need extra detours to invalidate it and it apparently performs adequately without it.
-		public int RegionMinimumPathCost(Region region)
+		//
+		// Minimum becomes Median: The minimum path cost preserved admissibility, but it tends to underestimate; small patches of low cost terrain among
+		// very high cost terrain cause significant underestimates and many extra nodes explored. The median is much, much more accurate in most cases
+		// Some of my test cases opened just 1/5-1/10 as many nodes compared to the minimum. Just one problem: calculating the true median is expensive.
+		// Random sampling gets reasonably good accuracy at a much lower cost. 
+		// 8 samples scientifically determined by untested guess.
+		public int RegionMedianPathCost(Region region)
 		{
 			int minCost;
 			if (minPathCosts.TryGetValue(region, out minCost))
 			{
 				return minCost;
 			}
-			minCost = 10000;
 
-			for (int z = region.extentsClose.minZ; z <= region.extentsClose.maxZ; z++) {
-				for (int x = region.extentsClose.minX; x <= region.extentsClose.maxX; x++)
-				{
-					var index = this.map.cellIndices.CellToIndex(x, z);
-					var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index]*8 ?? 0);
-					if (area != null && !area[index])
-					{
-					    cellCost = (cellCost + pathCostSettings.moveTicksCardinal) * 20;
-					}
-					minCost = Math.Min(minCost, cellCost);
-					if (minCost == 0)
-					{
-						minPathCosts[region] = 0;
-						return 0;
-					}
-				}
-			}
-			minPathCosts[region] = minCost;
+			//Setting a seed for deterministic behavior so test cases are consistent and bad paths can be reproduced
+			Rand.PushSeed();
+			Rand.Seed = map.cellIndices.CellToIndex(region.extentsClose.CenterCell) * (region.links.Count + 1);
+			for (int i = 0; i < 8; i++) { pathCostSamples[i] = GetCellCostFast(map.cellIndices.CellToIndex(region.RandomCell)); }
+			Rand.PopSeed();
+			Array.Sort(pathCostSamples);
 
-			return minCost;
+			return minPathCosts[region] = pathCostSamples[3];
+		}
+
+		private static int[] pathCostSamples = new int[8];
+
+
+		private int GetCellCostFast(int index)
+		{
+			var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index] * 8 ?? 0);
+			if (area != null && !area[index]) { cellCost = (cellCost + pathCostSettings.moveTicksCardinal * 1) * 20; }
+			return cellCost;
 		}
 
 		private int RegionLinkDistance(RegionLink a, RegionLink b, int minPathCost)

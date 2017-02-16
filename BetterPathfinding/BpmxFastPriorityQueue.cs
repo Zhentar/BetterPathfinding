@@ -108,11 +108,9 @@ namespace BetterPathfinding
 		private void SwapElements(int i, int j)
 		{
 			var value = innerList[i];
-			innerList[i] = innerList[j];
-			innerList[j] = value;
-			gridIndexToQueueIndex[innerList[i].gridIndex] = i;
-			gridIndexToQueueIndex[innerList[j].gridIndex] = j;
-		}
+            gridIndexToQueueIndex[(innerList[i] = innerList[j]).gridIndex] = i;
+            gridIndexToQueueIndex[(innerList[j] = value).gridIndex] = j;
+        }
 
 		private int CompareElements(int i, int j)
 		{

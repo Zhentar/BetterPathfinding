@@ -71,7 +71,7 @@ namespace BetterPathfinding
 			{
 				NewPathFinder.PfProfilerBeginSample("Get Region Distance"); 
                 bestLinkCost = distanceBuilder.GetRegionBestDistances(region, out bestLink, out secondBestLink, out secondBestLinkCost);
-				lastRegionTilePathCost = distanceBuilder.RegionMinimumPathCost(region);
+				lastRegionTilePathCost = distanceBuilder.RegionMedianPathCost(region);
 				NewPathFinder.PfProfilerEndSample();
 				lastRegionId = region.id;
 			}
