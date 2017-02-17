@@ -121,7 +121,7 @@ namespace BetterPathfinding
 
 			public Area area;
 		}
-
+		#region member variables
 		private Map map;
 
 		private BpmxFastPriortyQueue openList;
@@ -193,7 +193,8 @@ namespace BetterPathfinding
 		private readonly int[] neighIndexes = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
 		private SimpleCurve regionHeuristicWeight = null;
-
+		#endregion
+		
 		//With a flat weight on the heurestic, it ends up trying very hard near the end of the path, while ignoring easy opportunities early on in the path
 		//Weighting it on a curve lets us spread more of the effort across the whole path, getting the easy gains whereever they are along the path.
 		private readonly SimpleCurve regionHeuristicWeightReal = new SimpleCurve
@@ -210,7 +211,9 @@ namespace BetterPathfinding
 			new CurvePoint(4, 1.0f)
 		};
 
-		internal const float diagonalPercievedCostWeight = 1.1f;
+
+		//From testing 1.1 seems to be about the optimal value for this; raising it any higher increases cells opened
+		internal static float diagonalPercievedCostWeight = 1.1f;
 
 		private static readonly sbyte[] Directions = { 0, 1, 0, -1, 1, 1, -1, -1, -1, 0, 1, 0, -1, 1, 1, -1 };
 
@@ -219,6 +222,12 @@ namespace BetterPathfinding
 			new CurvePoint(40f, 10f),
 			new CurvePoint(130f, 35f)
 		};
+
+		private static bool weightEnabled = true;
+		//Pathmax disabled because after a number of heuristic improvements it started making paths
+		//worse/more expensive more often than it helped.
+		private static bool pathmaxEnabled = false;
+		
 
 		internal static bool disableDebugFlash = false;
 
@@ -243,10 +252,6 @@ namespace BetterPathfinding
 			Better
 		}
 
-		private static bool weightEnabled = true;
-		private static bool pathmaxEnabled = false;
-
-		private static readonly bool[] options = {false, true};
 
 		
 		public PawnPath FindPath(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
@@ -265,7 +270,7 @@ namespace BetterPathfinding
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
 			sw.Stop();
-			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+			Log.Message("~~ Vanilla ~~ " /*+ sw.ElapsedTicks + " ticks, "*/ + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			vanillaCost = temp.TotalCost;
 			temp.Dispose();
 
@@ -282,13 +287,13 @@ namespace BetterPathfinding
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
-			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
+			Log.Message("~~ Better ~~ " /*+ sw.ElapsedTicks + " ticks, "*/ + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
 
 			//var sb = new StringBuilder();
-			//foreach (var pathmax in options)
+			//foreach (var pathmax in { false, true })
 			//{
 			//	pathmaxEnabled = pathmax;
-			//	foreach (var weight in options)
+			//	foreach (var weight in { false, true })
 			//	{
 			//		weightEnabled = weight;
 			//		sw.Reset();
@@ -340,6 +345,26 @@ namespace BetterPathfinding
             }
 #endif
 			return result;
+		}
+
+		internal static string FindPathTunableHeader(IEnumerable<float> tunableValues)
+		{
+			string header = "";
+			foreach (var value in tunableValues) { header += $"|{value} pops|{value} cost"; }
+			return header;
+		}
+
+		internal string FindPathTunableTest(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, IEnumerable<float> tunableValues)
+		{
+			string results = "";
+			foreach (var value in tunableValues)
+			{
+				diagonalPercievedCostWeight = value;
+				var path = this.FindPathInner(start, dest, traverseParms, peMode);
+				results += $"|{debug_openCellsPopped}|{path.TotalCost}";
+				path.Dispose();
+			}
+			return results;
 		}
 
 
@@ -539,6 +564,7 @@ namespace BetterPathfinding
 						PfProfilerEndSample();
 						return ret;
 					}
+					//With reopening closed nodes, this limit can be reached a lot more easily. I've left it as is because it gets users to report bad paths. 
 					if (closedCellCount > 160000) {
 						Log.Warning(string.Concat(pawn, " pathing from ", start, " to ", dest, " hit search limit of ", 160000, " cells."));
 						PfProfilerEndSample();
@@ -682,8 +708,9 @@ namespace BetterPathfinding
 								needsUpdate = nodeH > calcGrid[neighIndex].heuristicCost;
 							}
 							else
-							{	//Don't reopen closed nodes if the path isn't cheaper by at least the difference between one straight & diagonal movement; it's too expensive 
-								minReopenGain = diagonalAddedTicks;
+							{	//Don't reopen closed nodes if the path cost difference isn't large enough to justify it; otherwise there can be cascades of revisiting the same nodes over and over for tiny path improvements each time
+								minReopenGain = moveTicksCardinal;
+								if (pawnPathCosts.area?[neighIndex] == false) { minReopenGain *= 10; }
 							}
 							calcGrid[neighIndex].heuristicCost = nodeH;
 							
@@ -747,7 +774,6 @@ namespace BetterPathfinding
 		    {
 			    if (!canPassAnything)
 			    {
-				    //DebugFlash(intVec, 0.22f, "walk");
 				    return 10000;
 			    }
 			    neighCost += 60;
@@ -774,9 +800,12 @@ namespace BetterPathfinding
 	        {
 	            neighCost += pawnPathCosts.avoidGrid[neighIndex] * 8;
 	        }
-	        if (pawnPathCosts.area != null && !pawnPathCosts.area[neighIndex])
-	        {
-	            neighCost = (neighCost + moveTicksCardinal) * 20;
+	        if (pawnPathCosts.area?[neighIndex] == false)
+	        {   //Allowed area path cost switched from adding a constant to multiplying the path cost
+				//Mostly this was to reduce reopens when very high path cost nodes get explored greedily (like trees)
+				//But I would imagine the player would generally prefer their pawns not spend ages walking over several trees
+				//just to get a path one tile shorter.
+	            neighCost = (Math.Max(neighCost, 10) + moveTicksCardinal * 2) * 10;
 	        }
 	        return (short)Math.Min(neighCost, 9999);
 	    }
@@ -811,14 +840,7 @@ namespace BetterPathfinding
 						if (!building_Door.FreePassage)
 						{
 							if (building_Door.PawnCanOpen(traverseParms.pawn)) { return building_Door.TicksToOpenNow; }
-							else
-							{
-								if (!traverseParms.canBash)
-								{
-									return -1;
-								}
-								return 300;
-							}
+							return !traverseParms.canBash ? -1 : 300;
 						}
 						break;
 					case TraverseMode.NoPassClosedDoors:

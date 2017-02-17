@@ -6,13 +6,14 @@ using Verse;
 
 namespace BetterPathfinding
 {
+
+	// This class is pretty much just a mostly hollow shell wrapped around the actual heuristic calculating object.
+	// At this point, pretty much the only purpose of it is to avoid instantiating the RegionLinkDijkstra for very short paths
 	class RegionPathCostHeuristic
 	{
 	
 		private readonly IntVec3 startCell;
 		private IntVec3 targetCell;
-		private readonly int moveTicksCardinal;
-		private readonly int moveTicksDiagonal;
 		private readonly Map map;
 		
 		private readonly IEnumerable<Region> rootRegions;
@@ -29,10 +30,7 @@ namespace BetterPathfinding
 		private readonly NewPathFinder.PawnPathCostSettings pathCosts;
 
 		private static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
-
-		private static readonly FieldInfo regionGridInfo = typeof(RegionGrid).GetField("regionGrid", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.GetField);
-
-		private Region[] regionGrid { get { return regionGridGet(this.map.regionGrid); } set { regionGridInfo.SetValue(this, value); } }
+		private Region[] regionGrid => regionGridGet(this.map.regionGrid);
 
 
 		public RegionPathCostHeuristic(Map map, IntVec3 start, CellRect end, IEnumerable<Region> destRegions, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts)
@@ -40,8 +38,6 @@ namespace BetterPathfinding
 			this.map = map;
 			startCell = start;
 			targetCell = end.CenterCell;
-			moveTicksCardinal = pathCosts.moveTicksCardinal;
-			moveTicksDiagonal = pathCosts.moveTicksDiagonal;
 			this.pathCosts = pathCosts;
 
 			rootRegions = new HashSet<Region>(destRegions);
@@ -79,6 +75,8 @@ namespace BetterPathfinding
 			if (bestLink != null)
 			{
 				var costToLink = distanceBuilder.RegionLinkDistance(cell, bestLink, lastRegionTilePathCost);
+				//Diagonal paths in open terrain often have two edges with similar costs; picking the best out of the two improves
+				//the accuracy of the heuristic for the path, reducing reopens when the heuristic was wrong about which edge was really cheaper
 				if (secondBestLink != null)
 				{
 					var costToSecondLink = distanceBuilder.RegionLinkDistance(cell, secondBestLink, lastRegionTilePathCost);
@@ -90,6 +88,6 @@ namespace BetterPathfinding
 			return 1000000; //shouldn't happen except for sappers
 		}
 
-		private int OctileDistance(int dx, int dz) => (moveTicksCardinal * (dx + dz) + (moveTicksDiagonal - 2 * moveTicksCardinal) * Math.Min(dx, dz));
+		private int OctileDistance(int dx, int dz) => (pathCosts.moveTicksCardinal * (dx + dz) + (pathCosts.moveTicksDiagonal - 2 * pathCosts.moveTicksCardinal) * Math.Min(dx, dz));
 	}
 }

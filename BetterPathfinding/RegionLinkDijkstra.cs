@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -38,11 +39,14 @@ namespace BetterPathfinding
 
 		private readonly Dictionary<RegionLink, int> distances = new Dictionary<RegionLink, int>();
 
+		//The idea of this was to get a more accurate target cell than the region link center when the destination is close to the edge of a region
+		//Using it as a target in the cell -> regionlink distance calculation was a disaster. But it helps the initial regionlink -> regionlink
+		//search enough to be worth keeping around.
 	    private readonly Dictionary<RegionLink, IntVec3> linkTargetCells = new Dictionary<RegionLink, IntVec3>();
 
 		private readonly FastPriorityQueue<RegionLinkQueueEntry> queue = new FastPriorityQueue<RegionLinkQueueEntry>(new DistanceComparer());
 		
-        private TraverseParms traverseParms;
+        private readonly TraverseParms traverseParms;
 
         private readonly IntVec3 targetCell;
 
@@ -77,6 +81,7 @@ namespace BetterPathfinding
 			//	debugPathfinder = new NewPathFinder(map);
 			//}
 
+			//Init the starting region links from the start cell
 			foreach (var region in startingRegions)
 			{
 				var minPathCost = RegionMedianPathCost(region);
@@ -110,7 +115,7 @@ namespace BetterPathfinding
 				var vertex = queue.Pop();
 				nodes_popped++;
 				int knownBest = distances[vertex.Link];
-				if (vertex.Cost == knownBest) //Will this ever not be true? - Yes. Not sure why. 
+				if (vertex.Cost == knownBest)
                 {
                     var destRegion = GetLinkOtherRegion(vertex.FromRegion, vertex.Link);
 
@@ -120,8 +125,8 @@ namespace BetterPathfinding
                     int portalCost = 0;
 					if (destRegion.portal != null)
                     {
-                        //Not using Region.Allows because it is not entirely consistent with the pathfinder logic
-                        //Resulting in errors when a door is within range of 22 turrets
+                        //Not using Region.Allows because it is not entirely consistent with the pathfinder logic,
+                        //resulting in errors when a door is within range of 22 turrets (avoidGrid=255)
                         portalCost = NewPathFinder.GetPathCostForBuilding(destRegion.portal, traverseParms);
                         if(portalCost < 0 ) { continue; }
                         portalCost = portalCost + OctileDistance(1, 0);
@@ -188,14 +193,11 @@ namespace BetterPathfinding
 			{
 				if (link == bestLink) { continue; }
 
-				if (distances.ContainsKey(link))
+				int cost;
+				if (distances.TryGetValue(link, out cost) && cost < secondBestCost)
 				{
-					var cost = distances[link];
-					if (cost < secondBestCost)
-					{
-						secondBestCost = cost;
-						secondBestLink = link;
-					}
+					secondBestCost = cost;
+					secondBestLink = link;
 				}
 			}
 
@@ -212,7 +214,7 @@ namespace BetterPathfinding
 		// very high cost terrain cause significant underestimates and many extra nodes explored. The median is much, much more accurate in most cases
 		// Some of my test cases opened just 1/5-1/10 as many nodes compared to the minimum. Just one problem: calculating the true median is expensive.
 		// Random sampling gets reasonably good accuracy at a much lower cost. 
-		// 8 samples scientifically determined by untested guess.
+		// 11 samples scientifically determined by untested guess.
 		public int RegionMedianPathCost(Region region)
 		{
 			int minCost;
@@ -224,20 +226,24 @@ namespace BetterPathfinding
 			//Setting a seed for deterministic behavior so test cases are consistent and bad paths can be reproduced
 			Rand.PushSeed();
 			Rand.Seed = map.cellIndices.CellToIndex(region.extentsClose.CenterCell) * (region.links.Count + 1);
-			for (int i = 0; i < 8; i++) { pathCostSamples[i] = GetCellCostFast(map.cellIndices.CellToIndex(region.RandomCell)); }
+			for (int i = 0; i < sampleCount; i++) { pathCostSamples[i] = GetCellCostFast(map.cellIndices.CellToIndex(region.RandomCell)); }
 			Rand.PopSeed();
 			Array.Sort(pathCostSamples);
 
-			return minPathCosts[region] = pathCostSamples[3];
+			// -3 because when a region is half full of something expensive (chunks, hydroponics bays), there's probably a cheaper path around them.
+			// Intentionally underestimating does hurt performance a bit, but it can also improve path quality significantly.
+			return minPathCosts[region] = pathCostSamples[(sampleCount-3)/2];
 		}
 
-		private static int[] pathCostSamples = new int[8];
+		private static readonly int[] pathCostSamples = new int[sampleCount];
+
+		private const int sampleCount = 11;
 
 
 		private int GetCellCostFast(int index)
 		{
 			var cellCost = this.map.pathGrid.pathGrid[index] + (avoidGrid?[index] * 8 ?? 0);
-			if (area != null && !area[index]) { cellCost = (cellCost + pathCostSettings.moveTicksCardinal * 1) * 20; }
+			if (area?[index] == false) { cellCost = (Math.Max(cellCost,10) + pathCostSettings.moveTicksCardinal * 2) * 10; }
 			return cellCost;
 		}
 
@@ -283,9 +289,12 @@ namespace BetterPathfinding
 
 		private int OctileDistance(int dx, int dz) => (pathCostSettings.moveTicksCardinal * (dx + dz) + (pathCostSettings.moveTicksDiagonal - 2 * pathCostSettings.moveTicksCardinal) * Math.Min(dx, dz));
 
-		private static IntVec3 GetLinkTargetCell(IntVec3 cell, RegionLink link)
+		//The idea here is that for cells far away from a regionlink, we estimate the cost to the center of the regionlink (same as the regionlink to regionlink estimates)
+		//But then closer to the regionlink, the path straight towards the link gets used (so the region corners don't get unreasonably high cost estimates).
+		//It helps some of my test cases quite a bit (hurts a couple too, though), so it seems to be worth the effort.
+		private IntVec3 GetLinkTargetCell(IntVec3 cell, RegionLink link)
 	    {
-	        int width = 0;
+		    int width = 0;
 	        int height = 0;
 	        if (link.span.dir == SpanDirection.North) { height = link.span.length - 1; }
 	        else
