@@ -29,7 +29,7 @@ namespace BetterPathfinding
         private readonly TraverseParms traverseParms;
 		private readonly NewPathFinder.PawnPathCostSettings pathCosts;
 
-		private static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
+		internal static readonly Func<RegionGrid, Region[]> regionGridGet = Utils.GetFieldAccessor<RegionGrid, Region[]>("regionGrid");
 		private Region[] regionGrid => regionGridGet(this.map.regionGrid);
 
 

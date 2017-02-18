@@ -8,7 +8,7 @@ using Verse;
 
 namespace BetterPathfinding
 {
-	public class Utils
+	public static class Utils
 	{
 		public static Func<TObject, TValue> GetFieldAccessor<TObject, TValue>(string fieldName)
 		{
@@ -19,6 +19,16 @@ namespace BetterPathfinding
 			return compiled;
 		}
 
+
+		public static bool IsDiagonal(this IntVec3 a, IntVec3 b)
+		{
+			return a.x != b.x && a.z != b.z;
+		}
+
+		public static bool IsIndexDiagonal(this int a, int b, Map map)
+		{
+			return ((a  % map.Size.x != b % map.Size.x)) && ((a / map.Size.x != b / map.Size.x));
+		}
 
 	#if DEBUG
 		[StaticConstructorOnStartup]

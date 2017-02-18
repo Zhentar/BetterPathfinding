@@ -290,10 +290,10 @@ namespace BetterPathfinding
 			Log.Message("~~ Better ~~ " /*+ sw.ElapsedTicks + " ticks, "*/ + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
 
 			//var sb = new StringBuilder();
-			//foreach (var pathmax in { false, true })
+			//foreach (var pathmax in new [] {false, true})
 			//{
 			//	pathmaxEnabled = pathmax;
-			//	foreach (var weight in { false, true })
+			//	foreach (var weight in new[] {false, true})
 			//	{
 			//		weightEnabled = weight;
 			//		sw.Reset();
@@ -532,7 +532,7 @@ namespace BetterPathfinding
 					curIntVec3 = cellIndices.IndexToCell(curIndex);
 					curX = (ushort)curIntVec3.x;
 					curZ = (ushort)curIntVec3.z;
-					if (DebugViewSettings.drawPaths && !disableDebugFlash)
+					if (DebugViewSettings.drawPaths && !disableDebugFlash && debug_openCellsPopped < 20000)
 					{
 						//draw backpointer
 						var arrow = GetBackPointerArrow(calcGrid[curIndex].parentX, calcGrid[curIndex].parentZ, curX, curZ);
@@ -675,7 +675,7 @@ namespace BetterPathfinding
 					PfProfilerEndSample();
 					#endregion
 
-					#region Pathmax rules
+					#region Updating open list
 					for (int i = 0; i < 8; i++)
 					{
 						neighIndex = neighIndexes[i];
