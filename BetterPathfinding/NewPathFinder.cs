@@ -45,9 +45,9 @@ namespace BetterPathfinding
 		private struct PathFinderNodeFast
 		{
 			public int knownCost;
-
+#if PATHMAX
 			public int originalHeuristicCost;
-
+#endif
 			public int heuristicCost;
 
 			public short perceivedPathCost;
@@ -87,12 +87,14 @@ namespace BetterPathfinding
 				if (a.totalCostEstimate < b.totalCostEstimate) {
 					return -1;
 				}
-				//The BPMX heuristic propagation results in a large number of ties. Using the pre-propagation
-				//heuristic value works very well as a tie breaker
+#if PATHMAX
+				The BPMX heuristic propagation results in a large number of ties. Using the pre-propagation
+				heuristic value works very well as a tie breaker
 				var aCost = grid[a.gridIndex].originalHeuristicCost + grid[a.gridIndex].knownCost;
 				var bCost = grid[b.gridIndex].originalHeuristicCost + grid[b.gridIndex].knownCost;
 				if (aCost > bCost) { return 1; }
 				if (aCost < bCost) { return -1; }
+#endif
 				return 0;
 			}
 		}
@@ -121,12 +123,12 @@ namespace BetterPathfinding
 
 			public Area area;
 		}
-		#region member variables
-		private Map map;
+#region member variables
+		private readonly Map map;
 
-		private BpmxFastPriortyQueue openList;
+		private readonly BpmxFastPriortyQueue openList;
 
-		private PathFinderNodeFast[] calcGrid;
+		private readonly PathFinderNodeFast[] calcGrid;
 
 		private ushort statusOpenValue = 1;
 
@@ -185,15 +187,15 @@ namespace BetterPathfinding
 		private int debug_totalOpenListCount;
 
 		private int debug_openCellsPopped;
-		
-		private int debug_closedCellsReopened;
+
+		private int closedCellsReopened;
 
 		private int debug_totalHeuristicCostEstimate;
 
 		private readonly int[] neighIndexes = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
 		private SimpleCurve regionHeuristicWeight = null;
-		#endregion
+#endregion
 		
 		//With a flat weight on the heurestic, it ends up trying very hard near the end of the path, while ignoring easy opportunities early on in the path
 		//Weighting it on a curve lets us spread more of the effort across the whole path, getting the easy gains whereever they are along the path.
@@ -308,7 +310,7 @@ namespace BetterPathfinding
 
 			//Log.Message("\t Distance Map Pops: " + RegionLinkDijkstra.nodes_popped);
 			//Log.Message("\t Total open cells added: " + debug_totalOpenListCount);
-			//Log.Message("\t Closed cells reopened: " + debug_closedCellsReopened);
+			//Log.Message("\t Closed cells reopened: " + closedCellsReopened);
 			//Log.Message($"\t Total Heuristic Estimate {debug_totalHeuristicCostEstimate}, off by {((temp.TotalCost / debug_totalHeuristicCostEstimate) - 1.0f).ToStringPercent()}");
 
 			temp?.Dispose();
@@ -509,7 +511,7 @@ namespace BetterPathfinding
 			if (pawn != null) {
 				shouldCollideWithPawns = PawnUtility.ShouldCollideWithPawns(pawn);
 			}
-			#endregion
+#endregion
 
 			while (true) {
 				PfProfilerBeginSample("Open cell pop");
@@ -556,7 +558,7 @@ namespace BetterPathfinding
 #endif
 						DebugFlash(curIntVec3, calcGrid[curIndex].knownCost / 1500f, leading + calcGrid[curIndex].knownCost + " " + arrow + " " + debug_openCellsPopped + trailing);
 					}
-					if ((destinationIsOneCell && curIndex == destinationIndex) || destinationRect.Contains(curIntVec3))
+					if (curIndex == destinationIndex || (!destinationIsOneCell && destinationRect.Contains(curIntVec3)))
 					{
 						PfProfilerEndSample();
 						PfProfilerBeginSample("Finalize Path");
@@ -607,7 +609,7 @@ namespace BetterPathfinding
 #if DEBUG
 							calcGrid[neighIndex].timesPopped = 0;
 #endif
-							#region heuristic
+#region heuristic
 							PfProfilerBeginSample("Heuristic");
 							switch (mode)
 							{
@@ -635,9 +637,11 @@ namespace BetterPathfinding
 									break;
 							}
 							calcGrid[neighIndex].heuristicCost = h;
+#if PATHMAX
 							calcGrid[neighIndex].originalHeuristicCost = h;
+#endif
 							PfProfilerEndSample();
-							#endregion
+#endregion
 						}
 
 
@@ -645,7 +649,7 @@ namespace BetterPathfinding
 						{
 							neighIndexes[i] = neighIndex;
 						}
-						if ((calcGrid[neighIndex].status == statusOpenValue && 
+						if (mode == HeuristicMode.Better && (calcGrid[neighIndex].status == statusOpenValue && 
 							Math.Max(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal, 1) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost))
 						{
 							calcGrid[curIndex].parentX = neighX;
@@ -655,6 +659,7 @@ namespace BetterPathfinding
 
 					}
 					#region BPMX Best H
+#if PATHMAX
 					PfProfilerBeginSample("BPMX Best H");
 					int bestH = calcGrid[curIndex].heuristicCost;
 					if (mode == HeuristicMode.Better && pathmaxEnabled)
@@ -673,9 +678,10 @@ namespace BetterPathfinding
 					//Pathmax Rule 3: set the current node heuristic to the best value of all connected nodes
 					calcGrid[curIndex].heuristicCost = bestH;
 					PfProfilerEndSample();
+#endif
 					#endregion
 
-					#region Updating open list
+#region Updating open list
 					for (int i = 0; i < 8; i++)
 					{
 						neighIndex = neighIndexes[i];
@@ -687,35 +693,43 @@ namespace BetterPathfinding
 						
                         //When path costs are significantly higher than move costs (e.g. snowy ice, or outside of allowed areas), 
 						//small differences in the weighted heuristic overwhelm the added cost of diagonal movement, so nodes
-						//can often be visited in unecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
+						//can often be visited in unnecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
 						//paths if they are not revisited. Weighting the diagonal path cost slightly counteracts this behavior, and
 						//should result in natural looking paths when it does cause suboptimal behavior
 						var thisDirEdgeCost = (i > 3 ? (int)(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
 
 						//var thisDirEdgeCost = calcGrid[neighIndex].perceivedPathCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
-						//Some mods can result in negative path costs. That'll work well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
+						//Some mods can result in negative path costs. That works well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
 						thisDirEdgeCost = (ushort)Math.Max(thisDirEdgeCost, 1);
 						neighCostThroughCur = thisDirEdgeCost + calcGrid[curIndex].knownCost;
+#if PATHMAX
 						//Pathmax Rule 1
 						int nodeH = (mode == HeuristicMode.Better && pathmaxEnabled) ? Math.Max(calcGrid[neighIndex].heuristicCost, bestH - thisDirEdgeCost) : calcGrid[neighIndex].heuristicCost;
-
+#endif
 						if (calcGrid[neighIndex].status == statusClosedValue || calcGrid[neighIndex].status == statusOpenValue)
 						{
+#if PATHMAX
 							bool needsUpdate = false;
+#endif
 							int minReopenGain = 0;
 							if (calcGrid[neighIndex].status == statusOpenValue)
 							{
+#if PATHMAX
 								needsUpdate = nodeH > calcGrid[neighIndex].heuristicCost;
+#endif
 							}
 							else
 							{	//Don't reopen closed nodes if the path cost difference isn't large enough to justify it; otherwise there can be cascades of revisiting the same nodes over and over for tiny path improvements each time
-								minReopenGain = moveTicksCardinal;
+								//Increasing the threshold as 
+								minReopenGain = moveTicksCardinal + closedCellsReopened/5; 
 								if (pawnPathCosts.area?[neighIndex] == false) { minReopenGain *= 10; }
 							}
+#if PATHMAX
 							calcGrid[neighIndex].heuristicCost = nodeH;
-							
+#endif
 							if (!(neighCostThroughCur + minReopenGain < calcGrid[neighIndex].knownCost))
 							{
+#if PATHMAX
 								if (needsUpdate) //if the heuristic cost was increased for an open node, we need to adjust its spot in the queue
 								{
 								    var neighCell = cellIndices.IndexToCell(neighIndex);
@@ -723,35 +737,34 @@ namespace BetterPathfinding
 									openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[neighIndex].knownCost - edgeCost
 																					 + (int)Math.Ceiling((edgeCost + nodeH) * regionHeuristicWeight.Evaluate(calcGrid[neighIndex].knownCost))));
 								}
+#endif
 								continue;
 							}
+							if (calcGrid[neighIndex].status == statusClosedValue)
+							{
+								closedCellsReopened++;
+							}
 						}
-						
-#if DEBUG
-						if (calcGrid[neighIndex].status == statusClosedValue)
-						{
-							debug_closedCellsReopened++;
-						}
-                        //else if (calcGrid[neighIndex].status != statusOpenValue)
-                        //{
-                        //    DebugFlash(cellIndices.IndexToCell(neighIndex), 0.2f, $"\n\n{calcGrid[neighIndex].originalHeuristicCost /*+ neighCostThroughCur*/} | {nodeH}\n" + $"{calcGrid[curIndex].knownCost + (int)Math.Ceiling((nodeH + thisDirEdgeCost) * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))}");
-                        //}
-#endif
+						//else
+						//{
+						//	DebugFlash(cellIndices.IndexToCell(neighIndex), 0.2f, $"\n\n{neighCostThroughCur} | {nodeH}\n{calcGrid[curIndex].knownCost + (int)Math.Ceiling((nodeH + thisDirEdgeCost) * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))}");
+						//}
 
-                        calcGrid[neighIndex].parentX = curX;
+						calcGrid[neighIndex].parentX = curX;
 						calcGrid[neighIndex].parentZ = curZ;
 						
 						calcGrid[neighIndex].knownCost = neighCostThroughCur;
 						calcGrid[neighIndex].status = statusOpenValue;
+#if PATHMAX
 						calcGrid[neighIndex].heuristicCost = nodeH;
-
+#endif
 						PfProfilerBeginSample("Push Open");
 						openList.PushOrUpdate(new CostNode(neighIndex, calcGrid[curIndex].knownCost
-																		+ (int)Math.Ceiling((nodeH + thisDirEdgeCost)  * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))));
+																		+ (int)Math.Ceiling((calcGrid[neighIndex].heuristicCost + thisDirEdgeCost)  * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))));
 						debug_totalOpenListCount++;
 						PfProfilerEndSample();
 					}
-					#endregion
+#endregion
 					PfProfilerEndSample();
 					closedCellCount++;
 					calcGrid[curIndex].status = statusClosedValue;
@@ -946,7 +959,7 @@ namespace BetterPathfinding
 		}
 
 
-	#if PFPROFILE
+#if PFPROFILE
 
 		private static Dictionary<string, Stopwatch> sws = new Dictionary<string, Stopwatch>();
 
@@ -954,12 +967,12 @@ namespace BetterPathfinding
 
 		private static bool hasRunOnce;
 
-	#endif
+#endif
 
 		[Conditional("PFPROFILE")]
 		public static void PfProfilerBeginSample(string s)
 		{
-	#if PFPROFILE
+#if PFPROFILE
 			Stopwatch sw;
 			if (!sws.TryGetValue(s, out sw))
 			{
@@ -967,7 +980,7 @@ namespace BetterPathfinding
 			}
 			currSw.Push(sw);
 			sw.Start();
-	#endif
+#endif
 		}
 
 		[Conditional("PFPROFILE")]
