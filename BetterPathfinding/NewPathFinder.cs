@@ -182,9 +182,9 @@ namespace BetterPathfinding
 		//Weighting it on a curve lets us spread more of the effort across the whole path, getting the easy gains whereever they are along the path.
 		private readonly SimpleCurve regionHeuristicWeightReal = new SimpleCurve
 		{	//x values get adjusted each run
-			new CurvePoint(0, 1.05f),
-			new CurvePoint(2, 1.1f),
-			new CurvePoint(4, 1.2f)
+			new CurvePoint(0, 1.04f),
+			new CurvePoint(2, 1.08f),
+			new CurvePoint(4, 1.16f)
 		};
 
 		private readonly SimpleCurve regionHeuristicWeightNone = new SimpleCurve
