@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using RimWorld;
 using Verse;
 using Verse.AI;
@@ -12,7 +11,6 @@ namespace BetterPathfinding
 #region Injection Code
 	static class PathFinderDetour
 	{
-
 		private static readonly Func<PathFinder, Map> mapGet = Utils.GetFieldAccessor<PathFinder, Map>("map");
 
 		public static PawnPath FindPath(this PathFinder @this, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
@@ -52,22 +50,13 @@ namespace BetterPathfinding
 
 			public short perceivedPathCost;
 
-			public ushort parentX;
-
-			public ushort parentZ;
-
 			public ushort status;
-			
+
+			public int parentIndex;
+
 #if DEBUG
 			public ushort timesPopped;
 #endif
-		}
-
-		private struct PathFinderNode
-		{
-			public IntVec3 position;
-
-			public IntVec3 parentPosition;
 		}
 
 		private class PathFinderNodeFastCostComparer : IComparer<CostNode>
@@ -138,13 +127,9 @@ namespace BetterPathfinding
 
 		private readonly int mapSizeZ;
 
-		private PathGrid pathGrid;
-
 		private int[] pathGridDirect;
 
 		private Building[] edificeGrid;
-
-		private PawnPath newPath;
 
 		private int moveTicksCardinal;
 
@@ -197,7 +182,7 @@ namespace BetterPathfinding
 		private SimpleCurve regionHeuristicWeight = null;
 #endregion
 		
-		//With a flat weight on the heurestic, it ends up trying very hard near the end of the path, while ignoring easy opportunities early on in the path
+		//With a flat weight on the heuristic, it ends up trying very hard near the end of the path, while ignoring easy opportunities early on in the path
 		//Weighting it on a curve lets us spread more of the effort across the whole path, getting the easy gains whereever they are along the path.
 		private readonly SimpleCurve regionHeuristicWeightReal = new SimpleCurve
 		{	//x values get adjusted each run
@@ -215,7 +200,9 @@ namespace BetterPathfinding
 
 
 		//From testing 1.1 seems to be about the optimal value for this; raising it any higher increases cells opened
-		internal static float diagonalPercievedCostWeight = 1.1f;
+		private const float diagonalCostWeightSetting = 1.1f;
+		
+		internal static float diagonalPerceivedCostWeight = diagonalCostWeightSetting;
 
 		private static readonly sbyte[] Directions = { 0, 1, 0, -1, 1, 1, -1, -1, -1, 0, 1, 0, -1, 1, 1, -1 };
 
@@ -268,11 +255,11 @@ namespace BetterPathfinding
 			var sw = new Stopwatch();
 			PawnPath temp = null;
 		    var vanillaCost = float.MaxValue - 1000;
-
+			diagonalPerceivedCostWeight = 1.0f;
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Vanilla);
 			sw.Stop();
-			Log.Message("~~ Vanilla ~~ " /*+ sw.ElapsedTicks + " ticks, "*/ + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
+			Log.Message("~~ Vanilla ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!");
 			vanillaCost = temp.TotalCost;
 			temp.Dispose();
 
@@ -284,12 +271,12 @@ namespace BetterPathfinding
 			//var optimal = temp.TotalCost;
 			//temp.Dispose();
 
-
+			diagonalPerceivedCostWeight = diagonalCostWeightSetting;
 			sw.Reset();
 			sw.Start();
 			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
 			sw.Stop();
-			Log.Message("~~ Better ~~ " /*+ sw.ElapsedTicks + " ticks, "*/ + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
+			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
 
 			//var sb = new StringBuilder();
 			//foreach (var pathmax in new [] {false, true})
@@ -340,7 +327,7 @@ namespace BetterPathfinding
 #if DEBUG
 			if (Current.ProgramState == ProgramState.Playing)
 			{
-                if (debug_openCellsPopped > 5000 || (vanillaCost + 100) < result.TotalCost)
+                if (debug_openCellsPopped > 2500 || (vanillaCost + 100) < result.TotalCost)
                 {
                     PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode);
                 }
@@ -349,21 +336,24 @@ namespace BetterPathfinding
 			return result;
 		}
 
-		internal static string FindPathTunableHeader(IEnumerable<float> tunableValues)
+		internal static string FindPathTunableHeader(IEnumerable<bool> tunableValues)
 		{
-			string header = "";
+			string header = "|optimal";
 			foreach (var value in tunableValues) { header += $"|{value} pops|{value} cost"; }
 			return header;
 		}
 
-		internal string FindPathTunableTest(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, IEnumerable<float> tunableValues)
+		internal string FindPathTunableTest(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, IEnumerable<bool> tunableValues)
 		{
 			string results = "";
+			var path2 = this.FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.AdmissableOctile);
+			results += $"|{path2.TotalCost}";
+			path2.Dispose();
 			foreach (var value in tunableValues)
 			{
-				diagonalPercievedCostWeight = value;
+				weightEnabled = value;
 				var path = this.FindPathInner(start, dest, traverseParms, peMode);
-				results += $"|{debug_openCellsPopped}|{path.TotalCost}";
+				results += $"|{debug_openCellsPopped}|{path.TotalCost}|{debug_totalHeuristicCostEstimate}";
 				path.Dispose();
 			}
 			return results;
@@ -442,7 +432,7 @@ namespace BetterPathfinding
 			if (peMode == PathEndMode.Touch) {
 				destinationRect = destinationRect.ExpandedBy(1);
 			}
-			var regions = destinationRect.Cells.Where(c => c.InBounds(map)).Select(c => this.map.regionGrid.GetRegionAt_InvalidAllowed(c)).Where(r => r != null);
+			var regions = destinationRect.Cells.Where(c => c.InBounds(map)).Select(c => this.map.regionGrid.GetValidRegionAt_NoRebuild(c)).Where(r => r != null);
 			//Pretty sure this shouldn't be able to happen...
 			if (mode == HeuristicMode.Better && !canPassAnything && !regions.Any())
 			{
@@ -450,8 +440,7 @@ namespace BetterPathfinding
 				Log.Warning("Pathfinding destination not in region, must fall back to vanilla!");
 			}
 			destinationIsOneCell = (destinationRect.Width == 1 && destinationRect.Height == 1);
-			pathGrid = this.map.pathGrid;
-			pathGridDirect = this.map.pathGrid.pathGrid;
+			this.pathGridDirect = this.map.pathGrid.pathGrid;
 			this.edificeGrid = this.map.edificeGrid.InnerArray;
 			statusOpenValue += 2;
 			statusClosedValue += 2;
@@ -475,7 +464,6 @@ namespace BetterPathfinding
 
 			moveTicksCardinal = pawnPathCosts.moveTicksCardinal;
 			moveTicksDiagonal = pawnPathCosts.moveTicksDiagonal;
-			var diagonalAddedTicks = moveTicksDiagonal - moveTicksCardinal;
 
 			//Where the magic happens
 			RegionPathCostHeuristic regionCost = new RegionPathCostHeuristic(map, start, destinationRect, regions, traverseParms, pawnPathCosts);
@@ -501,8 +489,7 @@ namespace BetterPathfinding
 			}
 			calcGrid[curIndex].knownCost = 0;
 			calcGrid[curIndex].heuristicCost = 0;
-			calcGrid[curIndex].parentX = (ushort)start.x;
-			calcGrid[curIndex].parentZ = (ushort)start.z;
+			calcGrid[curIndex].parentIndex = curIndex;
 			calcGrid[curIndex].status = statusOpenValue;
 			openList.Push(new CostNode(curIndex, 0));
 			
@@ -537,7 +524,7 @@ namespace BetterPathfinding
 					if (DebugViewSettings.drawPaths && !disableDebugFlash && debug_openCellsPopped < 20000)
 					{
 						//draw backpointer
-						var arrow = GetBackPointerArrow(calcGrid[curIndex].parentX, calcGrid[curIndex].parentZ, curX, curZ);
+						var arrow = GetBackPointerArrow(cellIndices.IndexToCell(calcGrid[curIndex].parentIndex), curIntVec3);
 						string leading = "";
 						string trailing = "";
 
@@ -562,7 +549,7 @@ namespace BetterPathfinding
 					{
 						PfProfilerEndSample();
 						PfProfilerBeginSample("Finalize Path");
-						var ret = FinalizedPath();
+						var ret = FinalizedPath(curIndex);
 						PfProfilerEndSample();
 						return ret;
 					}
@@ -584,17 +571,17 @@ namespace BetterPathfinding
 
                         switch (i)
                         {
-                            case 4:
-                                if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue; }
+                            case 4: //Northeast
+                                if (!pathGridDirect.WalkableExtraFast(curIndex - mapSizeX) || !pathGridDirect.WalkableExtraFast(curIndex +1)) { continue; }
                                 break;
-                            case 5:
-                                if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX + 1, curZ)) { continue; }
+                            case 5: //Southeast
+								if (!pathGridDirect.WalkableExtraFast(curIndex + mapSizeX) || !pathGridDirect.WalkableExtraFast(curIndex + 1)) { continue; }
                                 break;
-                            case 6:
-                                if (!pathGrid.WalkableFast(curX, curZ + 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
+                            case 6: //Southwest
+								if (!pathGridDirect.WalkableExtraFast(curIndex + mapSizeX) || !pathGridDirect.WalkableExtraFast(curIndex - 1)) { continue; }
                                 break;
-                            case 7:
-                                if (!pathGrid.WalkableFast(curX, curZ - 1) || !pathGrid.WalkableFast(curX - 1, curZ)) { continue; }
+                            case 7: //Northwest
+								if (!pathGridDirect.WalkableExtraFast(curIndex - mapSizeX) || !pathGridDirect.WalkableExtraFast(curIndex - 1)) { continue; }
                                 break;
                         }
 
@@ -650,11 +637,10 @@ namespace BetterPathfinding
 							neighIndexes[i] = neighIndex;
 						}
 						if (mode == HeuristicMode.Better && (calcGrid[neighIndex].status == statusOpenValue && 
-							Math.Max(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal, 1) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost))
+							Math.Max(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPerceivedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal, 1) + calcGrid[neighIndex].knownCost < calcGrid[curIndex].knownCost))
 						{
-							calcGrid[curIndex].parentX = neighX;
-							calcGrid[curIndex].parentZ = neighZ;
-							calcGrid[curIndex].knownCost = Math.Max(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal, 1) + calcGrid[neighIndex].knownCost;
+							calcGrid[curIndex].parentIndex = neighIndex;
+							calcGrid[curIndex].knownCost = Math.Max(i > 3 ? (int)(calcGrid[curIndex].perceivedPathCost * diagonalPerceivedCostWeight) + moveTicksDiagonal : calcGrid[curIndex].perceivedPathCost + moveTicksCardinal, 1) + calcGrid[neighIndex].knownCost;
 						}
 
 					}
@@ -696,7 +682,7 @@ namespace BetterPathfinding
 						//can often be visited in unnecessary zig-zags, causing lots of nodes to be reopened later, and weird looking
 						//paths if they are not revisited. Weighting the diagonal path cost slightly counteracts this behavior, and
 						//should result in natural looking paths when it does cause suboptimal behavior
-						var thisDirEdgeCost = (i > 3 ? (int)(calcGrid[neighIndex].perceivedPathCost * diagonalPercievedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
+						var thisDirEdgeCost = (i > 3 ? (int)(calcGrid[neighIndex].perceivedPathCost * diagonalPerceivedCostWeight) + moveTicksDiagonal : calcGrid[neighIndex].perceivedPathCost + moveTicksCardinal);
 
 						//var thisDirEdgeCost = calcGrid[neighIndex].perceivedPathCost + (i > 3 ? moveTicksDiagonal : moveTicksCardinal);
 						//Some mods can result in negative path costs. That works well enough with Vanilla, since it won't revisit closed nodes, but when we do, it's an infinite loop.
@@ -720,7 +706,7 @@ namespace BetterPathfinding
 							}
 							else
 							{	//Don't reopen closed nodes if the path cost difference isn't large enough to justify it; otherwise there can be cascades of revisiting the same nodes over and over for tiny path improvements each time
-								//Increasing the threshold as 
+								//Increasing the threshold as more cells get reopened further helps prevent cascades
 								minReopenGain = moveTicksCardinal + closedCellsReopened/5; 
 								if (pawnPathCosts.area?[neighIndex] == false) { minReopenGain *= 10; }
 							}
@@ -750,9 +736,7 @@ namespace BetterPathfinding
 						//	DebugFlash(cellIndices.IndexToCell(neighIndex), 0.2f, $"\n\n{neighCostThroughCur} | {nodeH}\n{calcGrid[curIndex].knownCost + (int)Math.Ceiling((nodeH + thisDirEdgeCost) * regionHeuristicWeight.Evaluate(calcGrid[curIndex].knownCost))}");
 						//}
 
-						calcGrid[neighIndex].parentX = curX;
-						calcGrid[neighIndex].parentZ = curZ;
-						
+						calcGrid[neighIndex].parentIndex = curIndex;
 						calcGrid[neighIndex].knownCost = neighCostThroughCur;
 						calcGrid[neighIndex].status = statusOpenValue;
 #if PATHMAX
@@ -783,7 +767,7 @@ namespace BetterPathfinding
 	    private short GetTotalPerceivedPathCost(TraverseParms traverseParms, bool canPassAnything, bool shouldCollideWithPawns, Pawn pawn, PawnPathCostSettings pawnPathCosts)
 	    {
 	        int neighCost = 0;
-		    if (!pathGrid.WalkableFast(neighX, neighZ))
+		    if (!pathGridDirect.WalkableExtraFast(neighIndex))
 		    {
 			    if (!canPassAnything)
 			    {
@@ -798,7 +782,7 @@ namespace BetterPathfinding
 		    {
 			    neighCost += pathGridDirect[neighIndex];
 		    }
-	        if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(new IntVec3(neighX, 0, neighZ), pawn))
+	        if (shouldCollideWithPawns && PawnUtility.AnyPawnBlockingPathAt(map.cellIndices.IndexToCell(neighIndex), pawn))
 	        {
 	            neighCost += 800;
 	        }
@@ -920,28 +904,28 @@ namespace BetterPathfinding
 			}
 		}
 
-		private PawnPath FinalizedPath()
+		private PawnPath FinalizedPath(int finalIndex)
 		{
-			newPath = this.map.pawnPathPool.GetEmptyPawnPath();
-			IntVec3 parentPosition = new IntVec3(curX, 0, curZ); 
-			var cellIndices = this.map.cellIndices;
-			int prevKnownCost = calcGrid[cellIndices.CellToIndex(parentPosition)].knownCost;
+			var newPath = this.map.pawnPathPool.GetEmptyPawnPath();
+			int parentIndex = finalIndex;
+#if DEBUG
+			int prevKnownCost = calcGrid[finalIndex].knownCost;
 			int actualCost = 0;
+#endif
 			while (true) {
-				PathFinderNodeFast pathFinderNodeFast = calcGrid[cellIndices.CellToIndex(parentPosition)];
-				PathFinderNode pathFinderNode;
-				pathFinderNode.parentPosition = new IntVec3(pathFinderNodeFast.parentX, 0, pathFinderNodeFast.parentZ);
-				pathFinderNode.position = parentPosition;
-				newPath.AddNode(pathFinderNode.position);
-
+				PathFinderNodeFast pathFinderNodeFast = calcGrid[parentIndex];
+				int newParentIndex = pathFinderNodeFast.parentIndex;
+				newPath.AddNode(map.cellIndices.IndexToCell(parentIndex));
+#if DEBUG
 				actualCost += prevKnownCost - pathFinderNodeFast.knownCost;
 				prevKnownCost = pathFinderNodeFast.knownCost;
 				var hDiscrepancy = actualCost - pathFinderNodeFast.heuristicCost;
-				DebugFlash(parentPosition, hDiscrepancy / 100f, "\n\n" /*+ actualCost + "\n"*/ + hDiscrepancy);
-				if (pathFinderNode.position == pathFinderNode.parentPosition) {
+				DebugFlash(map.cellIndices.IndexToCell(parentIndex), hDiscrepancy / 100f, "\n\n" /*+ actualCost + "\n"*/ + hDiscrepancy);
+#endif
+				if (parentIndex == newParentIndex) {
 					break;
 				}
-				parentPosition = pathFinderNode.parentPosition;
+				parentIndex = newParentIndex;
 			}
 			newPath.SetupFound(calcGrid[curIndex].knownCost);
 			PfProfilerEndSample();

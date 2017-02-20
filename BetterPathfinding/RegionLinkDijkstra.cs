@@ -105,7 +105,6 @@ namespace BetterPathfinding
 				}
 				foreach (var pair in PreciseRegionLinkDistances(region, rootCell))
 				{
-					//Console.WriteLine(pair.Second + "\t" + distances[pair.First]);
 					var current = pair.First;
 					var dist = Math.Max(pair.Second, distances[current]);
 					distances[current] = dist;
@@ -266,7 +265,7 @@ namespace BetterPathfinding
             var dx = Math.Abs(diff.x);
             var dz = Math.Abs(diff.z);
 
-            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPerceivedCostWeight - 1.0f));
 		}
 
 		private static int SpanCenterX(EdgeSpan e) => e.root.x + (e.dir == SpanDirection.East ? e.length / 2 : 0);
@@ -295,7 +294,7 @@ namespace BetterPathfinding
 		    var dx = Math.Abs(diff.x);
             var dz = Math.Abs(diff.z);
 
-            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPercievedCostWeight - 1.0f));
+            return OctileDistance(dx, dz) + minPathCost * Math.Max(dx, dz) + (int)(minPathCost * Math.Min(dx, dz) * (NewPathFinder.diagonalPerceivedCostWeight - 1.0f));
         }
 
 		private int OctileDistance(int dx, int dz) => (pathCostSettings.moveTicksCardinal * (dx + dz) + (pathCostSettings.moveTicksDiagonal - 2 * pathCostSettings.moveTicksCardinal) * Math.Min(dx, dz));
@@ -337,60 +336,21 @@ namespace BetterPathfinding
 		private IEnumerable<Pair<RegionLink, int>> PreciseRegionLinkDistances(Region region, IntVec3 start)
 		{
 			var startIndex = map.cellIndices.CellToIndex(start);
-			IEnumerable<int> startIndices = regionGrid[startIndex]?.id != region.id ? NeighborIndicesGetter(startIndex, map) : new[] {startIndex};
+			IEnumerable<int> startIndices = regionGrid[startIndex]?.id != region.id ? startIndex.NeighborIndices(map) : new[] {startIndex};
 			
 			Dictionary<int, float> outDistances = new Dictionary<int, float>();
 			Dijkstra<int>.Run(startIndices,
-									x => regionGrid[x]?.id != region.id ? Enumerable.Empty<int>() : PathableNeighborIndicesGetter(x, map),
+									x => regionGrid[x]?.id != region.id ? Enumerable.Empty<int>() : x.PathableNeighborIndices(map),
 									(a, b) => GetCellCostFast(b) + (a.IsIndexDiagonal(b, map) ? pathCostSettings.moveTicksDiagonal : pathCostSettings.moveTicksCardinal),
 									ref outDistances);
 			foreach (var link in region.links)
 			{
+				//TODO: try linktargetcell instead of min
 				var minCost = link.span.Cells.Select(c => outDistances[map.cellIndices.CellToIndex(c)]).Min();
 				yield return new Pair<RegionLink, int>(link, (int)minCost);
 			}
 		}
 
-		private static IEnumerable<int> NeighborIndicesGetter(int index, Map map)
-		{
-			int mapX = map.Size.x;
-			var eastInBounds = (index % mapX > 0);
-			var westInBounds = (index % mapX < (mapX - 1));
-			if (index > mapX) //North in bounds
-			{
-				yield return index - mapX;
-				if (eastInBounds) { yield return index - mapX - 1; }
-				if (westInBounds) { yield return index - mapX + 1; }
-			}
-			if (eastInBounds) { yield return index - 1; }
-			if (westInBounds) { yield return index + 1; }
-			if ((index / mapX) < (map.Size.z - 1)) //South in bounds
-			{
-				yield return index + mapX;
-				if (eastInBounds) { yield return index + mapX - 1; }
-				if (westInBounds) { yield return index + mapX + 1; }
-			}
-		}
 
-		private static IEnumerable<int> PathableNeighborIndicesGetter(int index, Map map)
-		{
-			int mapX = map.Size.x;
-			var eastInBounds = (index % mapX > 0) && map.pathGrid.pathGrid[index-1] < 10000;
-			var westInBounds = (index % mapX < (mapX - 1)) && map.pathGrid.pathGrid[index + 1] < 10000;
-			if (index > mapX && map.pathGrid.pathGrid[index - mapX] < 10000) //North in bounds
-			{
-				yield return index - mapX;
-				if (eastInBounds) { yield return index - mapX - 1; }
-				if (westInBounds) { yield return index - mapX + 1; }
-			}
-			if (eastInBounds) { yield return index - 1; }
-			if (westInBounds) { yield return index + 1; }
-			if ((index / mapX) < (map.Size.z - 1) && map.pathGrid.pathGrid[index + mapX] < 10000) //South in bounds
-			{
-				yield return index + mapX;
-				if (eastInBounds) { yield return index + mapX - 1; }
-				if (westInBounds) { yield return index + mapX + 1; }
-			}
-		}
     }
 }

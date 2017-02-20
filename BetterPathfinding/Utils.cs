@@ -25,12 +25,59 @@ namespace BetterPathfinding
 			return a.x != b.x && a.z != b.z;
 		}
 
+		public static bool WalkableExtraFast(this int[] pathGridDirect, int index)
+		{
+			return pathGridDirect[index] < 10000;
+		}
+
 		public static bool IsIndexDiagonal(this int a, int b, Map map)
 		{
 			return ((a  % map.Size.x != b % map.Size.x)) && ((a / map.Size.x != b / map.Size.x));
 		}
 
-	#if DEBUG
+		public static IEnumerable<int> NeighborIndices(this int index, Map map)
+		{
+			int mapX = map.Size.x;
+			var eastInBounds = (index % mapX > 0);
+			var westInBounds = (index % mapX < (mapX - 1));
+			if (index > mapX) //North in bounds
+			{
+				yield return index - mapX;
+				if (eastInBounds) { yield return index - mapX - 1; }
+				if (westInBounds) { yield return index - mapX + 1; }
+			}
+			if (eastInBounds) { yield return index - 1; }
+			if (westInBounds) { yield return index + 1; }
+			if ((index / mapX) < (map.Size.z - 1)) //South in bounds
+			{
+				yield return index + mapX;
+				if (eastInBounds) { yield return index + mapX - 1; }
+				if (westInBounds) { yield return index + mapX + 1; }
+			}
+		}
+
+		public static IEnumerable<int> PathableNeighborIndices(this int index, Map map)
+		{
+			int mapX = map.Size.x;
+			var eastInBounds = (index % mapX > 0) && map.pathGrid.pathGrid.WalkableExtraFast(index - 1);
+			var westInBounds = (index % mapX < (mapX - 1)) && map.pathGrid.pathGrid.WalkableExtraFast(index + 1);
+			if (index > mapX && map.pathGrid.pathGrid.WalkableExtraFast(index - mapX)) //North in bounds
+			{
+				yield return index - mapX;
+				if (eastInBounds) { yield return index - mapX - 1; }
+				if (westInBounds) { yield return index - mapX + 1; }
+			}
+			if (eastInBounds) { yield return index - 1; }
+			if (westInBounds) { yield return index + 1; }
+			if ((index / mapX) < (map.Size.z - 1) && map.pathGrid.pathGrid.WalkableExtraFast(index + mapX)) //South in bounds
+			{
+				yield return index + mapX;
+				if (eastInBounds) { yield return index + mapX - 1; }
+				if (westInBounds) { yield return index + mapX + 1; }
+			}
+		}
+
+#if DEBUG
 		[StaticConstructorOnStartup]
 		public static class Log
 		{
