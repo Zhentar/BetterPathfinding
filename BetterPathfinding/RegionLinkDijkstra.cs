@@ -149,7 +149,7 @@ namespace BetterPathfinding
 						var addedCost = destRegion.portal != null ? portalCost : RegionLinkDistance(vertex.Link, current2, minPathCost);
 						addedCost = Math.Max(addedCost, 1); //Handle mods with negative path costs
 						int newCost = knownBest + addedCost;
-                        int pathCost = RegionLinkDistance(targetCell, current2, 0) + newCost;
+                        int pathCost = MinimumRegionLinkDistance(targetCell, current2) + newCost;
 						int oldCost;
 						if (distances.TryGetValue(current2, out oldCost))
 						{
@@ -180,7 +180,8 @@ namespace BetterPathfinding
 						//	//if (actualCost < knownBest) { Log.Warning(vertex.Link + " has actual cost " + actualCost + "with heuristic " + knownBest); }
 						//}
 						regionMinLink[destRegion.id] = vertex.Link;
-						if (destRegion.id == region.id) {
+						if (destRegion.id == region.id)
+						{
 							minLink = vertex.Link;
 							return vertex.Cost;
 						}
@@ -286,6 +287,13 @@ namespace BetterPathfinding
 			return cost(dx, dz) + minPathCost * Math.Max(dx, dz);
 		}
 
+		private int MinimumRegionLinkDistance(IntVec3 cell, RegionLink link)
+		{
+			var diff = cell - LinkClosestCell(cell, link);
+			return OctileDistance(Math.Abs(diff.x), Math.Abs(diff.z));
+
+		}
+
 		public int RegionLinkDistance(IntVec3 cell, RegionLink link, int minPathCost)
 		{
 		    var targetCell = GetLinkTargetCell(cell, link);
@@ -304,15 +312,9 @@ namespace BetterPathfinding
 		//It helps some of my test cases quite a bit (hurts a couple too, though), so it seems to be worth the effort.
 		private IntVec3 GetLinkTargetCell(IntVec3 cell, RegionLink link)
 	    {
-		    int width = 0;
-	        int height = 0;
-	        if (link.span.dir == SpanDirection.North) { height = link.span.length - 1; }
-	        else
-	        { width = link.span.length - 1; }
+		    var targetCell = LinkClosestCell(cell, link);
 
-	        IntVec3 targetCell = new IntVec3(Mathf.Clamp(cell.x, link.span.root.x, link.span.root.x + width), 0, Mathf.Clamp(cell.z, link.span.root.z, link.span.root.z + height));
-
-            var diff = cell - targetCell;
+		    var diff = cell - targetCell;
             var dx = Math.Abs(diff.x);
             var dz = Math.Abs(diff.z);
 
@@ -325,7 +327,19 @@ namespace BetterPathfinding
             return targetCell;
 	    }
 
-	    private static IntVec3 IntVec3Lerp(IntVec3 cellA, IntVec3 cellB, double factor)
+		private static IntVec3 LinkClosestCell(IntVec3 cell, RegionLink link)
+		{
+			int width = 0;
+			int height = 0;
+			if (link.span.dir == SpanDirection.North) { height = link.span.length - 1; }
+			else
+			{ width = link.span.length - 1; }
+
+			IntVec3 targetCell = new IntVec3(Mathf.Clamp(cell.x, link.span.root.x, link.span.root.x + width), 0, Mathf.Clamp(cell.z, link.span.root.z, link.span.root.z + height));
+			return targetCell;
+		}
+
+		private static IntVec3 IntVec3Lerp(IntVec3 cellA, IntVec3 cellB, double factor)
 	    {
 	        return new IntVec3((int) Math.Round(cellA.x + (cellB.x - cellA.x) * factor), 0, (int) Math.Round(cellA.z + (cellB.z - cellA.z) * factor));
 	    }
@@ -345,8 +359,7 @@ namespace BetterPathfinding
 									ref outDistances);
 			foreach (var link in region.links)
 			{
-				//TODO: try linktargetcell instead of min
-				var minCost = link.span.Cells.Select(c => outDistances[map.cellIndices.CellToIndex(c)]).Min();
+				var minCost = outDistances[map.cellIndices.CellToIndex(linkTargetCells[link])];
 				yield return new Pair<RegionLink, int>(link, (int)minCost);
 			}
 		}

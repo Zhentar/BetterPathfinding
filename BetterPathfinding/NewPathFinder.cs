@@ -137,10 +137,6 @@ namespace BetterPathfinding
 
 		private int curIndex;
 
-		private ushort curX;
-
-		private ushort curZ;
-
 		private IntVec3 curIntVec3 = default(IntVec3);
 
 		private int neighIndex;
@@ -519,8 +515,6 @@ namespace BetterPathfinding
 					calcGrid[curIndex].timesPopped++;
 #endif
 					curIntVec3 = cellIndices.IndexToCell(curIndex);
-					curX = (ushort)curIntVec3.x;
-					curZ = (ushort)curIntVec3.z;
 					if (DebugViewSettings.drawPaths && !disableDebugFlash && debug_openCellsPopped < 20000)
 					{
 						//draw backpointer
@@ -565,8 +559,8 @@ namespace BetterPathfinding
 					{
 						neighIndexes[i] = -1;
 
-                        neighX = (ushort)(curX + Directions[i]);
-                        neighZ = (ushort)(curZ + Directions[i + 8]);
+                        neighX = (ushort)(curIntVec3.x + Directions[i]);
+                        neighZ = (ushort)(curIntVec3.z + Directions[i + 8]);
                         if (neighX >= mapSizeX || neighZ >= mapSizeZ) { continue; }
 
                         switch (i)
