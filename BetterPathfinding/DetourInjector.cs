@@ -65,4 +65,35 @@ namespace BetterPathfinding
 		}
 
 	}
+
+	#region Injection Code & MapComponent
+	static class PathFinderDetour
+	{
+		private static readonly Func<PathFinder, Map> mapGet = Utils.GetFieldAccessor<PathFinder, Map>("map");
+
+		public static PawnPath FindPath(this PathFinder @this, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
+		{
+			var map = mapGet(@this);
+			var pfcomp = map.GetComponent<PathFinderMapComponent>();
+
+			if (pfcomp == null)
+			{
+				pfcomp = new PathFinderMapComponent(map);
+				map.components.Add(pfcomp);
+			}
+			return pfcomp.PathFinder.FindPath(start, dest, traverseParms, peMode);
+		}
+	}
+
+	class PathFinderMapComponent : MapComponent
+	{
+		public readonly NewPathFinder PathFinder;
+
+		public PathFinderMapComponent(Map map) : base(map)
+		{
+			PathFinder = new NewPathFinder(map);
+		}
+	}
+	#endregion
+
 }

@@ -11,9 +11,9 @@ using Verse;
 namespace BetterPathfinding
 {
 
-#if DEBUG
 	// Mono performs float math at double precision. To get exactly the same results for a path while running in the MS .NET CLR,
 	// a double SimpleCurve is necessary.
+#if DEBUG
 	internal class SimpleCurve : IEnumerable<CurvePoint>
 	{
 		private List<CurvePoint> points = new List<CurvePoint>();

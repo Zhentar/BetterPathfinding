@@ -8,36 +8,6 @@ using Verse.AI;
 
 namespace BetterPathfinding
 {
-#region Injection Code
-	static class PathFinderDetour
-	{
-		private static readonly Func<PathFinder, Map> mapGet = Utils.GetFieldAccessor<PathFinder, Map>("map");
-
-		public static PawnPath FindPath(this PathFinder @this, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
-		{
-			var map = mapGet(@this);
-			var pfcomp = map.GetComponent<PathFinderMapComponent>();
-
-			if (pfcomp == null)
-			{
-				pfcomp = new PathFinderMapComponent(map);
-				map.components.Add(pfcomp);
-			}
-			return pfcomp.PathFinder.FindPath(start, dest, traverseParms, peMode);
-		}
-	}
-
-	class PathFinderMapComponent : MapComponent
-	{
-		public readonly NewPathFinder PathFinder;
-
-		public PathFinderMapComponent(Map map) : base(map)
-		{
-			PathFinder = new NewPathFinder(map);
-		}
-	}
-#endregion
-
 	public class NewPathFinder
 	{
 		private struct PathFinderNodeFast
@@ -209,8 +179,8 @@ namespace BetterPathfinding
 		};
 
 		private static bool weightEnabled = true;
-		//Pathmax disabled because after a number of heuristic improvements it started making paths
-		//worse/more expensive more often than it helped.
+		//Pathmax disabled because after a number of heuristic improvements it started
+		//making paths worse/more expensive more often than it helped.
 		private static bool pathmaxEnabled = false;
 		
 
@@ -238,7 +208,7 @@ namespace BetterPathfinding
 		}
 
 
-		
+		//Wrapper function to run extra testing/logging code.
 		public PawnPath FindPath(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode = PathEndMode.OnCell)
 		{
 #if DEBUG
@@ -332,6 +302,7 @@ namespace BetterPathfinding
 			return result;
 		}
 
+		//Automated testing util
 		internal static string FindPathTunableHeader(IEnumerable<bool> tunableValues)
 		{
 			string header = "|optimal";
@@ -339,6 +310,7 @@ namespace BetterPathfinding
 			return header;
 		}
 
+		//Automated testing util
 		internal string FindPathTunableTest(IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, IEnumerable<bool> tunableValues)
 		{
 			string results = "";
@@ -355,7 +327,7 @@ namespace BetterPathfinding
 			return results;
 		}
 
-
+		//FindPath parameter validation
 		private bool ValidateFindPathParameters(Pawn pawn, IntVec3 start, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode, bool canPassAnything)
 		{
 			if (pawn != null && pawn.Map != this.map)
@@ -801,6 +773,8 @@ namespace BetterPathfinding
 	        return (short)Math.Min(neighCost, 9999);
 	    }
 
+		//Delegate for getting pawn path settings so that offline testing can replace it and
+		//load the parameters from a file without needing to fully populate a Pawn to support ti
 	    public static Func<Pawn, PawnPathCostSettings> GetPawnPathCostSettings = GetPawnPathCostSettingsDefault;
 
 		private static PawnPathCostSettings GetPawnPathCostSettingsDefault(Pawn pawn)
@@ -814,6 +788,8 @@ namespace BetterPathfinding
 			};
 		}
 
+		//Delegate for getting building path costs so that offline testing can fake building costs
+		//Without needing to fully initialize building & stuff defs.
 		public static Func<Building, TraverseParms, int> GetPathCostForBuilding = GetPathCostForBuildingDefault;
 
 		private static int GetPathCostForBuildingDefault(Building building, TraverseParms traverseParms)

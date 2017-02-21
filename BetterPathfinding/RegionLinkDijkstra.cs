@@ -7,9 +7,13 @@ using Verse;
 
 namespace BetterPathfinding
 {
+	/*******************************
+	This class uses an A* search (not Dijkstra's algorithm, the class name lies)
+	of regionlinks to estimate the path cost to the destination from each RegionLink.
+	These path costs can then be used as the basis for a high accuracy heuristic.
+	*******************************/
 	public class RegionLinkDijkstra
 	{
-
 		private struct RegionLinkQueueEntry
 		{
 			public readonly Region FromRegion;
@@ -26,13 +30,9 @@ namespace BetterPathfinding
 			}
 		}
 
-
 		private class DistanceComparer : IComparer<RegionLinkQueueEntry>
 		{
-			public int Compare(RegionLinkQueueEntry a, RegionLinkQueueEntry b)
-			{
-				return a.EstimatedPathCost.CompareTo(b.EstimatedPathCost);
-			}
+			public int Compare(RegionLinkQueueEntry a, RegionLinkQueueEntry b) => a.EstimatedPathCost.CompareTo(b.EstimatedPathCost);
 		}
         
 		private readonly Dictionary<int, RegionLink> regionMinLink = new Dictionary<int, RegionLink>();

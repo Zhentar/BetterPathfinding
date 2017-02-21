@@ -19,6 +19,15 @@ namespace BetterPathfinding
 			return compiled;
 		}
 
+		public static Func<object, TValue> GetFieldAccessor<TValue>(Type objectType, string fieldName)
+		{
+			var param = Expression.Parameter(typeof(object), "arg");
+			var cast = Expression.Convert(param, objectType);
+			var member = Expression.Field(cast, fieldName);
+			var lambda = Expression.Lambda(typeof(Func<object, TValue>), member, param);
+			var compiled = (Func<object, TValue>)lambda.Compile();
+			return compiled;
+		}
 
 		public static bool IsDiagonal(this IntVec3 a, IntVec3 b)
 		{

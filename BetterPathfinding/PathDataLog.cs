@@ -9,6 +9,11 @@ using Verse.AI;
 
 namespace BetterPathfinding
 {
+	/*******************************
+	PathDataLog saves/loads (almost) all of the state needed for a pathfinding call
+	This minimizes the amount of game state needed to run test cases, allowing for
+	perfectly repeatable automated testing.
+	*******************************/
 	public class PathDataLog : IExposable
 	{
 		public static void SaveFromPathCall(Map map, IntVec3 startVec, LocalTargetInfo dest, TraverseParms traverseParms, PathEndMode peMode)
