@@ -13,7 +13,8 @@ namespace BetterPathfinding
 	{
 	
 		private readonly IntVec3 startCell;
-		private IntVec3 targetCell;
+		private readonly IntVec3 targetCell;
+		private readonly CellRect targetRect;
 		private readonly Map map;
 		
 		private readonly IEnumerable<Region> rootRegions;
@@ -38,6 +39,7 @@ namespace BetterPathfinding
 			this.map = map;
 			startCell = start;
 			targetCell = end.CenterCell;
+			targetRect = end;
 			this.pathCosts = pathCosts;
 
 			rootRegions = new HashSet<Region>(destRegions);
@@ -59,7 +61,7 @@ namespace BetterPathfinding
 			if (distanceBuilder == null)
 			{
 				NewPathFinder.PfProfilerBeginSample("Distance Map Init");
-				distanceBuilder = new RegionLinkDijkstra(map, targetCell, rootRegions, startCell, traverseParms, pathCosts);
+				distanceBuilder = new RegionLinkDijkstra(map, targetRect, rootRegions, startCell, traverseParms, pathCosts);
 				NewPathFinder.PfProfilerEndSample();
 			}
 

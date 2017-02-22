@@ -65,15 +65,15 @@ namespace BetterPathfinding
 		private readonly Dictionary<Region, int> minPathCosts = new Dictionary<Region, int>();
 
 		//private NewPathFinder debugPathfinder;
-		public IntVec3 rootCell;
+		private readonly IntVec3 rootCell;
 
-		public RegionLinkDijkstra(Map map, IntVec3 rootCell, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts)
+		public RegionLinkDijkstra(Map map, CellRect destination, IEnumerable<Region> startingRegions, IntVec3 target, TraverseParms parms, NewPathFinder.PawnPathCostSettings pathCosts)
 		{
 			this.map = map;
 			this.regionGrid = RegionPathCostHeuristic.regionGridGet(map.regionGrid);
             this.traverseParms = parms;
             this.targetCell = target;
-			this.rootCell = rootCell;
+			this.rootCell = destination.CenterCell;
 		    this.pathCostSettings = pathCosts;
 			avoidGrid = pathCosts.avoidGrid;
 			area = pathCosts.area;
@@ -103,7 +103,7 @@ namespace BetterPathfinding
 					{ linkTargetCells[current] = GetLinkTargetCell(rootCell, current); }
 					distances[current] = dist;
 				}
-				foreach (var pair in PreciseRegionLinkDistances(region, rootCell))
+				foreach (var pair in PreciseRegionLinkDistances(region, destination))
 				{
 					var current = pair.First;
 					var dist = Math.Max(pair.Second, distances[current]);
@@ -347,11 +347,9 @@ namespace BetterPathfinding
 	    private static Region GetLinkOtherRegion(Region fromRegion, RegionLink link) =>  Equals(fromRegion, link.RegionA) ? link.RegionB : link.RegionA;
 
 
-		private IEnumerable<Pair<RegionLink, int>> PreciseRegionLinkDistances(Region region, IntVec3 start)
+		private IEnumerable<Pair<RegionLink, int>> PreciseRegionLinkDistances(Region region, CellRect start)
 		{
-			var startIndex = map.cellIndices.CellToIndex(start);
-			IEnumerable<int> startIndices = regionGrid[startIndex]?.id != region.id ? startIndex.NeighborIndices(map) : new[] {startIndex};
-			
+			var startIndices = start.Cells.Select(c => map.cellIndices.CellToIndex(c));
 			Dictionary<int, float> outDistances = new Dictionary<int, float>();
 			Dijkstra<int>.Run(startIndices,
 									x => regionGrid[x]?.id != region.id ? Enumerable.Empty<int>() : x.PathableNeighborIndices(map),

@@ -293,7 +293,7 @@ namespace BetterPathfinding
 #if DEBUG
 			if (Current.ProgramState == ProgramState.Playing)
 			{
-                if (debug_openCellsPopped > 2500 || (vanillaCost + 100) < result.TotalCost)
+                if (debug_openCellsPopped > 2500 || (vanillaCost + 100) < result.TotalCost || result == PawnPath.NotFound)
                 {
                     PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode);
                 }
