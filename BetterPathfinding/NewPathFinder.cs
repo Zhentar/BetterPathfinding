@@ -237,13 +237,19 @@ namespace BetterPathfinding
 			//var optimal = temp.TotalCost;
 			//temp.Dispose();
 
-			diagonalPerceivedCostWeight = diagonalCostWeightSetting;
-			sw.Reset();
-			sw.Start();
-			temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
-			sw.Stop();
-			Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
-
+			try
+			{
+				diagonalPerceivedCostWeight = diagonalCostWeightSetting;
+				sw.Reset();
+				sw.Start();
+				temp = FindPathInner(start, dest, traverseParms, peMode, HeuristicMode.Better);
+				sw.Stop();
+				Log.Message("~~ Better ~~ " + sw.ElapsedTicks + " ticks, " + debug_openCellsPopped + " open cells popped, " + temp.TotalCost + " path cost!  (" /*+ sw.ElapsedMilliseconds*/ + "ms)");
+			}
+			catch
+			{
+				if (Current.ProgramState == ProgramState.Playing) { PathDataLog.SaveFromPathCall(this.map, start, dest, traverseParms, peMode); }
+			}
 			//var sb = new StringBuilder();
 			//foreach (var pathmax in new [] {false, true})
 			//{
@@ -400,7 +406,8 @@ namespace BetterPathfinding
 			if (peMode == PathEndMode.Touch) {
 				destinationRect = destinationRect.ExpandedBy(1);
 			}
-			var regions = destinationRect.Cells.Where(c => c.InBounds(map)).Select(c => this.map.regionGrid.GetValidRegionAt_NoRebuild(c)).Where(r => r != null);
+			destinationRect = destinationRect.ClipInsideMap(map);
+			var regions = destinationRect.Cells.Select(c => this.map.regionGrid.GetValidRegionAt_NoRebuild(c)).Where(r => r != null);
 			//Pretty sure this shouldn't be able to happen...
 			if (mode == HeuristicMode.Better && !canPassAnything && !regions.Any())
 			{
